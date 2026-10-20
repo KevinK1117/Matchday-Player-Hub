@@ -20,10 +20,33 @@ export default async function handler(req,res){
    }
   }
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
+  const shortlist=players.slice(0,Math.min(24,players.length));
+  const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
+  await Promise.allSettled(shortlist.map(async p=>{
+    try{
+      const log=await fetchJson(`/player/${p.id}/game-log/${yr}${yr+1}/2`);
+      const entries=(log.gameLog||[]).filter(g=>g.gameDate && g.gameDate<date).sort((a,b)=>String(b.gameDate).localeCompare(String(a.gameDate))).slice(0,5);
+      p.last5=entries.map(g=>({date:g.gameDate,goals:g.goals??null,shots:g.shots??null,toi:g.toi??null,powerPlayToi:g.powerPlayToi??null}));
+      const times=entries.map(g=>sec(g.toi)).filter(v=>v!==null);
+      p.toiLast5=times.length?times.reduce((a,b)=>a+b,0)/times.length:null;
+      const power=entries.map(g=>sec(g.powerPlayToi)).filter(v=>v!==null);
+      p.ppToiLast5=power.length?power.reduce((a,b)=>a+b,0)/power.length:null;
+      p.last5Shots=entries.length&&entries.every(g=>g.shots!=null)?entries.reduce((a,g)=>a+Number(g.shots),0):null;
+      p.last5Goals=entries.length&&entries.every(g=>g.goals!=null)?entries.reduce((a,g)=>a+Number(g.goals),0):null;
+      p.participation=(log.gameLog||[]).some(g=>games.some(m=>String(m.id)===String(g.gameId)))?'Bestätigter Einsatz':'Einsatz nicht bestätigt';
+    }catch{p.participation='Einsatz nicht bestätigt';p.last5=[];p.toiLast5=null;p.ppToiLast5=null;}
+  }));
+  for(const p of players){
+    if(!p.participation)p.participation='Einsatz nicht bestätigt';
+    const match=games.find(g=>g.home===p.team||g.away===p.team);
+    p.opponent=match?(match.home===p.team?match.away:match.home):null;
+  }
+  const eligiblePlayers=req.query.confirmed==='1'?players.filter(p=>p.participation==='Bestätigter Einsatz'):players;
+
   // Diversity is soft: first ensure each game is represented when possible, then fill by rank.
   const picked=[];const seen=new Set();
-  for(const g of games){const p=players.find(p=>(p.team===g.home||p.team===g.away)&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}
-  for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:players.length,requested:count,method:'Aggressive: Goals/GP × 0.58 + Shots/GP × 0.11 + Powerplay Goals/GP × 0.20. Ranking-Score, keine Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  for(const g of games){const p=eligiblePlayers.find(p=>(p.team===g.home||p.team===g.away)&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}
+  for(const p of eligiblePlayers){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Aggressive: Goals/GP × 0.58 + Shots/GP × 0.11 + Powerplay Goals/GP × 0.20. Ranking-Score, keine Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele vor dem gewählten Datum. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){return res.status(502).json({error:'NHL-Daten konnten nicht geladen werden',detail:String(e.message||e)})}
 }
