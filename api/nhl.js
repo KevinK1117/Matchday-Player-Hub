@@ -1,5 +1,7 @@
 const ROOT='https://api-web.nhle.com/v1';
-const fetchJson=async(path)=>{const r=await fetch(ROOT+path,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error(`NHL API ${r.status}`);return r.json()};
+const cache=new Map();
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const fetchJson=async(path)=>{const now=Date.now();const stored=cache.get(path);if(stored&&stored.expires>now)return stored.data;let r=await fetch(ROOT+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(r.status===429){if(stored)return stored.data;const err=new Error('NHL API 429: temporäre Anfragelimitierung');err.rateLimited=true;throw err}if(!r.ok){if(stored)return stored.data;throw Error(`NHL API ${r.status}`)}const data=await r.json();cache.set(path,{data,expires:now+(path.startsWith('/score/')?300000:1800000)});if(cache.size>300)cache.delete(cache.keys().next().value);return data};
 const value=o=>typeof o==='string'?o:o?.default||o?.en||'';
 const sec=v=>{if(typeof v==='number')return v;const m=/^(\d+):(\d\d)$/.exec(String(v||''));return m?+m[1]*60 + +m[2]:null};
 export default async function handler(req,res){
@@ -20,9 +22,12 @@ export default async function handler(req,res){
    }
   }
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
-  const shortlist=players.slice(0,Math.min(24,players.length));
+  // A large parallel fan-out caused NHL API 429. Enrich only selected top-ranked players, sequentially.
+  const shortlist=players.slice(0,Math.min(count,players.length));
   const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
-  await Promise.allSettled(shortlist.map(async p=>{
+  let stoppedForRateLimit=false;
+  for(const p of shortlist){
+    if(stoppedForRateLimit)break;
     try{
       const log=await fetchJson(`/player/${p.id}/game-log/${yr}${yr+1}/2`);
       const entries=(log.gameLog||[]).filter(g=>g.gameDate && g.gameDate<date).sort((a,b)=>String(b.gameDate).localeCompare(String(a.gameDate))).slice(0,5);
@@ -34,8 +39,9 @@ export default async function handler(req,res){
       p.last5Shots=entries.length&&entries.every(g=>g.shots!=null)?entries.reduce((a,g)=>a+Number(g.shots),0):null;
       p.last5Goals=entries.length&&entries.every(g=>g.goals!=null)?entries.reduce((a,g)=>a+Number(g.goals),0):null;
       p.participation=(log.gameLog||[]).some(g=>games.some(m=>String(m.id)===String(g.gameId)))?'Bestätigter Einsatz':'Einsatz nicht bestätigt';
-    }catch{p.participation='Einsatz nicht bestätigt';p.last5=[];p.toiLast5=null;p.ppToiLast5=null;}
-  }));
+    }catch(err){p.participation='Einsatz nicht bestätigt';p.last5=[];p.toiLast5=null;p.ppToiLast5=null;if(err.rateLimited)stoppedForRateLimit=true;}
+    if(!stoppedForRateLimit)await pause(120);
+  }
   for(const p of players){
     if(!p.participation)p.participation='Einsatz nicht bestätigt';
     const match=games.find(g=>g.home===p.team||g.away===p.team);
@@ -47,6 +53,6 @@ export default async function handler(req,res){
   const picked=[];const seen=new Set();
   for(const g of games){const p=eligiblePlayers.find(p=>(p.team===g.home||p.team===g.away)&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}
   for(const p of eligiblePlayers){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Aggressive: Goals/GP × 0.58 + Shots/GP × 0.11 + Powerplay Goals/GP × 0.20. Ranking-Score, keine Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele vor dem gewählten Datum. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
- }catch(e){return res.status(502).json({error:'NHL-Daten konnten nicht geladen werden',detail:String(e.message||e)})}
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Aggressive: Goals/GP × 0.58 + Shots/GP × 0.11 + Powerplay Goals/GP × 0.20. Ranking-Score, keine Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+ }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
