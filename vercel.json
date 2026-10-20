@@ -1,0 +1,1 @@
+{"version":2,"functions":{"api/*.js":{"maxDuration":30}},"crons":[{"path":"/api/warm","schedule":"15 5 * * *"}]}
