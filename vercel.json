@@ -1,1 +1,41 @@
-{"version":2,"functions":{"api/*.js":{"maxDuration":30}},"crons":[{"path":"/api/warm","schedule":"15 5 * * *"}]}
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "^/icon.svg$",
+      "dest": "/public/icon.svg"
+    },
+    {
+      "src": "^/manifest.webmanifest$",
+      "dest": "/public/manifest.webmanifest"
+    },
+    {
+      "src": "^/$",
+      "dest": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/warm",
+      "schedule": "15 5 * * *"
+    }
+  ]
+}
