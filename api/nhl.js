@@ -57,7 +57,7 @@ export default async function handler(req,res){
   for(const p of players){
     if(!p.participation)p.participation='Einsatz nicht bestätigt';
     const match=games.find(g=>g.home===p.team||g.away===p.team);
-    p.opponent=match?(match.home===p.team?match.away:match.home):null;
+    p.opponent=match?(match.home===p.team?match.away:match.home):null;p.fixtureId=match?.id??null;
   }
   const eligiblePlayers=req.query.confirmed==='1'?players.filter(p=>p.participation==='Bestätigter Einsatz'):players;
 
