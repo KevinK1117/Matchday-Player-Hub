@@ -8,10 +8,15 @@ function displayOdds(d,shown,allPlayers,games,forms){
  const quotes=Array.isArray(d.quotes)?d.quotes:[],players=allPlayers||shown||[];
  const fixtures=new Map((games||[]).map(g=>[String(g.id),g]));
  const teamForm=new Map((forms?.teams||[]).map(x=>[String(x.teamId),x]));
- const normalize=x=>String(x||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+ const normalize=x=>String(x||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
  const eligible=[];
  for(const q of quotes){
   const g=fixtures.get(String(q.fixtureId));if(!g||!q.bookmaker||!(Number(q.decimal)>1))continue;
+  // Pre-match only. Quotes without a trusted last-update timestamp are displayed by source but not selected.
+  const start=Date.parse(g.start||'');
+  if(!Number.isFinite(start)||start<=Date.now()+5*60000)continue;
+  const updated=Date.parse(q.updatedAt||'');
+  if(!Number.isFinite(updated)||updated>Date.now()+60000||Date.now()-updated>6*3600000)continue;
   const market=String(q.market||'').toLowerCase(),selection=String(q.selection||'').toLowerCase();
   let score=null,reason='',sample=0,confidence='';
   if(market==='anytime_goalscorer'||/player_goal_scorer_anytime/.test(market)){
@@ -27,10 +32,10 @@ function displayOdds(d,shown,allPlayers,games,forms){
    score=estimated;sample=appearances;reason='Saison '+(goals/appearances).toFixed(2)+' Tore/Spiel · '+shots.toFixed(1)+' Schüsse/Spiel'+(recent?' · letzte 5 berücksichtigt':'');confidence=recent?'mittel':'niedrig';
   }else if(sport==='football'){
    const home=teamForm.get(String(g.homeId)),away=teamForm.get(String(g.awayId));
-   if(!home||!away||home.sample<7||away.sample<7)continue;
+   if(!home||!away||home.sample<8||away.sample<8||home.homeSample<3||away.awaySample<3)continue;
    sample=Math.min(home.sample,away.sample);
-   const lambdaH=Math.max(0.15,(home.goalsFor+away.goalsAgainst)/2)*1.07;
-   const lambdaA=Math.max(0.15,(away.goalsFor+home.goalsAgainst)/2)*0.95;
+   const lambdaH=Math.max(0.15,(home.homeGoalsFor+away.awayGoalsAgainst)/2*0.65+(home.goalsFor+away.goalsAgainst)/2*0.35);
+   const lambdaA=Math.max(0.15,(away.awayGoalsFor+home.homeGoalsAgainst)/2*0.65+(away.goalsFor+home.goalsAgainst)/2*0.35);
    const pois=(k,lam)=>Math.exp(-lam)*Math.pow(lam,k)/[1,1,2,6,24,120,720,5040,40320,362880,3628800][k];
    const grid=[];let total=0;
    for(let h=0;h<=9;h++)for(let a=0;a<=9;a++){const p=pois(h,lambdaH)*pois(a,lambdaA);grid.push({h,a,p});total+=p}
@@ -45,7 +50,7 @@ function displayOdds(d,shown,allPlayers,games,forms){
     const line=Number(q.line);if(Math.abs(line%1-0.5)>0.001)continue;
     score=selection==='over'?sum(x=>x.h+x.a>line):selection==='under'?sum(x=>x.h+x.a<line):null;
    }
-   if(score!=null){reason='Letzte '+home.sample+'/'+away.sample+' Spiele · Tore/Spiel '+home.goalsFor.toFixed(2)+'/'+away.goalsFor.toFixed(2)+' · vereinfachtes Poisson-Modell';confidence='niedrig';}
+   if(score!=null){reason='Letzte '+home.sample+'/'+away.sample+' Spiele · Tore/Spiel '+home.goalsFor.toFixed(2)+'/'+away.goalsFor.toFixed(2)+' · Heim-/Auswärtswerte · vereinfachtes Poisson-Modell';confidence='niedrig';}
   }
   if(score==null||!Number.isFinite(score)||score<0.25||score>0.97)continue;
   const implied=1/Number(q.decimal),edge=score-implied;
