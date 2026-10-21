@@ -25,7 +25,7 @@ const lineupResults=await Promise.allSettled(games.map(async g=>{
   const rows=await api('/fixtures/lineups?fixture='+g.id,key);
   const ids=new Set();
   for(const side of rows){for(const e of side.startXI||[])if(e.player?.id)ids.add(e.player.id)}
-  return {fixtureId:g.id,ids,published:rows.some(side=>(side.startXI||[]).length>0)};
+  return {fixtureId:g.id,ids,published:rows.some(side=>(side.startXI||[]).length>0),sides:rows.map(side=>({teamId:side.team?.id,formation:side.formation||null,starters:(side.startXI||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos})),bench:(side.substitutes||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos}))}))};
 }));
 const lineups=new Map(lineupResults.filter(x=>x.status==='fulfilled').map(x=>[x.value.fixtureId,x.value]));
 for(const p of playerByKey.values()){
@@ -64,5 +64,6 @@ let players=[...playerByKey.values()].filter(p=>!p.exclusionReason&&Number.isFin
 players=players.filter(p=>p.participation==='Startelf bestätigt');}
 // Spread initial candidates across matches, then fill any remaining places globally.
 const picked=[];const seen=new Set();for(const g of games){const p=players.find(p=>p.fixtureId===g.id&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,requested:count,updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 35 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+const lineupDisplay=games.map(g=>({fixtureId:g.id,confirmed:!!lineups.get(g.id)?.published,teams:lineups.get(g.id)?.sides||[]}));
+const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 35 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
