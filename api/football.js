@@ -48,9 +48,21 @@ try{
   }
   if(process.env.XG_FEED_URL)xgInfo=`Externer xG-Feed: ${populated} Spieler abgeglichen`;
 }catch(err){xgInfo='xG-Feed nicht erreichbar: '+String(err.message).slice(0,90)}
-let players=[...playerByKey.values()].sort((a,b)=>b.score-a.score||b.minutesPerGame-a.minutesPerGame);if(confirmedOnly){ // Upcoming games have no officially confirmed lineup in this API response.
+// Only trust lineup evidence for the corresponding fixture. A known bench player is not a confirmed starter.
+for(const p of playerByKey.values()){
+  const lineup=lineups.get(p.fixtureId);
+  if(lineup?.published && !lineup.ids.has(p.id)){p.score=-Infinity;p.exclusionReason='Nicht in bestätigter Startelf'}
+  else {
+    const minutesFactor=Math.min(1,Math.max(0,(p.minutesPerGame||0)/85));
+    const involvement=p.shotsPerGame==null?0:Math.min(4,p.shotsPerGame);
+    p.score=(p.goalsPerGame*4+involvement*1.4+(p.penaltyGoals>0?0.25:0))*minutesFactor;
+    if(p.xG90!=null)p.score+=Math.min(1.5,p.xG90)*2;
+    p.exclusionReason=(p.minutesPerGame||0)<35?'Zu geringe durchschnittliche Einsatzzeit':null;
+  }
+}
+let players=[...playerByKey.values()].filter(p=>!p.exclusionReason&&Number.isFinite(p.score)).sort((a,b)=>b.score-a.score||b.minutesPerGame-a.minutesPerGame);if(confirmedOnly){ // Upcoming games have no officially confirmed lineup in this API response.
 players=players.filter(p=>p.participation==='Startelf bestätigt');}
 // Spread initial candidates across matches, then fill any remaining places globally.
 const picked=[];const seen=new Set();for(const g of games){const p=players.find(p=>p.fixtureId===g.id&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,requested:count,updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader und bestätigt keine Startelf. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,requested:count,updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 35 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
