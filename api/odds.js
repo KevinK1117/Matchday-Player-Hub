@@ -33,10 +33,10 @@ export default async function handler(req,res){
     if(!response.ok)throw Error('Quotenanbieter HTTP '+response.status);
     const data=await response.json();
     const quotes=(Array.isArray(data.quotes)?data.quotes:[]).filter(q=>
-      q&&String(q.bookmaker).toLowerCase()==='bet365'&&q.market==='anytime_goalscorer'&&
+      q&&typeof q.bookmaker==='string'&&q.bookmaker.trim().length>0&&q.market==='anytime_goalscorer'&&
       Number.isInteger(Number(q.fixtureId))&&Number.isInteger(Number(q.playerId))&&
       Number.isFinite(Number(q.decimal))&&Number(q.decimal)>1
-    ).map(q=>({fixtureId:Number(q.fixtureId),playerId:Number(q.playerId),bookmaker:'bet365',market:'anytime_goalscorer',decimal:Number(q.decimal)}));
+    ).map(q=>({fixtureId:Number(q.fixtureId),playerId:Number(q.playerId),bookmaker:String(q.bookmaker).trim(),market:'anytime_goalscorer',decimal:Number(q.decimal)}));
     return res.status(200).json({configured:true,source:data.source||'Lizenzierter Quotenfeed',updatedAt:data.updatedAt||null,quotes});
   }catch(e){return res.status(502).json({error:'Quotenfeed nicht erreichbar oder nicht kompatibel',detail:String(e.message)})}
 }
