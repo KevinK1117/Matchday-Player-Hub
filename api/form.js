@@ -21,7 +21,8 @@ async function form(team,date,key){
  });
  const n=matches.length;
  const avg=key=>n?matches.reduce((sum,x)=>sum+x[key],0)/n:null;
- const result={teamId:team,sample:n,goalsFor:avg('goals'),goalsAgainst:avg('against'),winRate:n?matches.filter(x=>x.win).length/n:null,drawRate:n?matches.filter(x=>x.draw).length/n:null,bttsRate:n?matches.filter(x=>x.goals>0&&x.against>0).length/n:null,over25Rate:n?matches.filter(x=>x.goals+x.against>2.5).length/n:null,lastMatch:matches[0]?.date||null,homeSample:matches.filter(x=>x.home).length,awaySample:matches.filter(x=>!x.home).length};
+ const venueAvg=(atHome,stat)=>{const set=matches.filter(x=>x.home===atHome);return set.length?set.reduce((sum,x)=>sum+x[stat],0)/set.length:null};
+ const result={teamId:team,sample:n,goalsFor:avg('goals'),goalsAgainst:avg('against'),homeGoalsFor:venueAvg(true,'goals'),homeGoalsAgainst:venueAvg(true,'against'),awayGoalsFor:venueAvg(false,'goals'),awayGoalsAgainst:venueAvg(false,'against'),winRate:n?matches.filter(x=>x.win).length/n:null,drawRate:n?matches.filter(x=>x.draw).length/n:null,bttsRate:n?matches.filter(x=>x.goals>0&&x.against>0).length/n:null,over25Rate:n?matches.filter(x=>x.goals+x.against>2.5).length/n:null,lastMatch:matches[0]?.date||null,homeSample:matches.filter(x=>x.home).length,awaySample:matches.filter(x=>!x.home).length};
  cache.set(cacheKey,{data:result,until:Date.now()+25*60000});if(cache.size>100)cache.delete(cache.keys().next().value);
  return result;
 }
