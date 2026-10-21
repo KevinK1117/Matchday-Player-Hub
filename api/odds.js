@@ -4,8 +4,8 @@ const SPORTS=new Set(['nhl','football']);
 const cache=new Map();
 const cacheGet=k=>{const v=cache.get(k);return v&&v.until>Date.now()?v.data:null};
 const cacheSet=(k,data,minutes=10)=>{cache.set(k,{data,until:Date.now()+minutes*60000});if(cache.size>60)cache.delete(cache.keys().next().value);return data};
-const validQuote=q=>q&&typeof q.bookmaker==='string'&&q.bookmaker.trim()&&q.market==='anytime_goalscorer'&&q.fixtureId!=null&&(q.playerId!=null||typeof q.playerName==='string'&&q.playerName.trim())&&Number.isFinite(Number(q.decimal))&&Number(q.decimal)>1&&Number(q.decimal)<1000;
-const clean=qs=>qs.filter(validQuote).map(q=>({fixtureId:Number.isInteger(Number(q.fixtureId))?Number(q.fixtureId):String(q.fixtureId),playerId:q.playerId==null?null:String(q.playerId),playerName:q.playerName?String(q.playerName).trim():null,bookmaker:q.bookmaker.trim(),market:'anytime_goalscorer',decimal:Number(q.decimal),updatedAt:q.updatedAt||null}));
+const validQuote=q=>q&&typeof q.bookmaker==='string'&&q.bookmaker.trim()&&typeof q.market==='string'&&q.market.trim()&&q.fixtureId!=null&&(q.selection!=null||q.playerId!=null||typeof q.playerName==='string'&&q.playerName.trim())&&Number.isFinite(Number(q.decimal))&&Number(q.decimal)>1&&Number(q.decimal)<1000;
+const clean=qs=>qs.filter(validQuote).map(q=>({fixtureId:Number.isInteger(Number(q.fixtureId))?Number(q.fixtureId):String(q.fixtureId),playerId:q.playerId==null?null:String(q.playerId),playerName:q.playerName?String(q.playerName).trim():null,bookmaker:q.bookmaker.trim(),market:String(q.market).trim(),selection:q.selection==null?null:String(q.selection),decimal:Number(q.decimal),updatedAt:q.updatedAt||null}));
 const respond=(res,source,quotes,notice='',updatedAt=null)=>res.status(200).json({configured:quotes.length>0,source,quotes:clean(quotes),notice,updatedAt:updatedAt||new Date().toISOString()});
 async function json(url,headers={}){
  const response=await fetch(url,{headers,signal:AbortSignal.timeout(10000)});
@@ -31,14 +31,14 @@ async function footballOdds(date){
  const markets=(catalogue.response||[]).filter(b=>/anytime\s*goal\s*scorer|any\s*time\s*scorer|to score at any time|player to score anytime/i.test(String(b.name||'')));
  if(!markets.length)return {source:'API-Sports',quotes:[],notice:'API-Sports bietet im abgefragten Vormarkt-Katalog keinen eindeutigen Anytime-Torschützenmarkt.'};
  const all=[];
- for(const market of markets.slice(0,2)){
+ for(const market of markets.slice(0,8)){
   for(let page=1;page<=3;page++){
    const d=await json(root+'/odds?date='+date+'&bet='+market.id+'&page='+page,headers);
    for(const game of d.response||[])for(const book of game.bookmakers||[])for(const bet of book.bets||[]){
     if(Number(bet.id)!==Number(market.id))continue;
     for(const pick of bet.values||[]){
      const name=String(pick.value||'').trim(),decimal=Number(pick.odd);
-     if(name&&Number.isFinite(decimal)&&decimal>1)all.push({fixtureId:game.fixture?.id,playerName:name,bookmaker:book.name,market:'anytime_goalscorer',decimal,updatedAt:game.update||null});
+     if(name&&Number.isFinite(decimal)&&decimal>1)all.push({fixtureId:game.fixture?.id,selection:name,playerName:/scor/i.test(market.name)?name:null,bookmaker:book.name,market:String(market.name),decimal,updatedAt:game.update||null});
     }
    }
    if(!d.paging||d.paging.current>=d.paging.total)break;
