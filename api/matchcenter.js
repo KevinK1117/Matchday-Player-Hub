@@ -12,12 +12,12 @@ const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
- if(!['fixtures','detail','table','player','squad'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','detail','table','player','squad','scorers'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['detail','player','squad'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
- if(['table','player','squad'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
- if(action==='table'&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
+ if(['detail','player','squad','scorers'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
+ if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
@@ -40,6 +40,7 @@ export default async function handler(req,res){
  if(team){try{const next=(await api('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await api('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
  data={profiles,recent,recentError,participation};
  }
+ if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
  if(action==='squad')data=await api('/players?team='+q.id+'&season='+q.season+'&page=1',key);
  if(action==='detail'){
  const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isTopFlight(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});

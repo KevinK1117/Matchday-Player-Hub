@@ -37,3 +37,11 @@ Bei mehreren Spielern aus derselben Begegnung wird keine tatsächliche Gesamtquo
 ## Blau-Weiß und Wettbewerbsauswahl
 
 Die Hauptoberfläche nutzt wieder einen hellen blau-weißen Stil. Fußball-Spieltag und Torschützenkandidaten sind auf nationale Männer-Erstligen weltweit begrenzt; Zweitligen, Pokale, internationale Klubwettbewerbe sowie Jugend- und Frauenligen werden ausgeschlossen. NHL bleibt separat verfügbar. Die Klassifikation in `public/competitions.js` gleicht Land und exakte Wettbewerbsnamen beziehungsweise bekannte Anbieter-Aliasse ab. Unbekannte Wettbewerbe werden nicht automatisch als Erstliga eingestuft. Die tatsächliche Länder-, Saison- und Statistikabdeckung hängt vom Sportdatenanbieter ab. Weitere freigegebene Erstligen des geladenen Spieltags erscheinen automatisch in der Seitenleiste.
+
+## Mobile Matchcenter (Oktober 2026)
+
+Die Startseite öffnet das Matchcenter mit dunkelblauem Kopf, pinken Akzenten und iPhone-Navigation. Matchdetails enthalten Statistiken, Liveticker (NHL: Torereignisse), Liga-Topscorer, Spielerbilder, Aufstellungen/Spielbericht und Tabellen. NHL nutzt ergänzend die NHL-Datenquelle. Spieler-xG und Powerplay-Eiszeit sind ohne passenden Zusatzfeed weiterhin nicht verfügbar; es werden keine Werte erfunden.
+
+Remis-/Außenseiteranalyse: 6–10 verschiedene Begegnungen, Tabellenstand, Formpunkte der letzten fünf abgeschlossenen Spiele, Heim-/Auswärtsform und H2H. Maximal 30 Spiele je Anfrage werden geprüft; fehlende Auswahlplätze werden nicht aufgefüllt. Außenseiterdefinition anhand der Tabelle, nicht anhand einer verifizierten Marktquote. Kein kalibriertes Wahrscheinlichkeitsmodell. API-Sports-Key in Vercel serverseitig setzen. Der vorherige Konfigurator bleibt unter `/public/goal-combo.html` erreichbar.
+
+Deployment: Repository in Vercel importieren, `vercel.json` beibehalten, `API_SPORTS_KEY` als geheime Umgebungsvariable konfigurieren. Reale Daten und Bilder hängen von Anbietererreichbarkeit, Lizenz und Tarif ab.

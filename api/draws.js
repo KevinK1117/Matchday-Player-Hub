@@ -12,12 +12,12 @@ async function api(path,key){
  return value;
 }
 const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
-function form(rows,id,date){
+export function form(rows,id,date){
  const games=rows.filter(g=>completed(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
  const details=games.map(g=>{const home=Number(g.teams.home.id)===Number(id),scored=Number(home?g.goals.home:g.goals.away),conceded=Number(home?g.goals.away:g.goals.home);return {home,scored,conceded,points:scored>conceded?3:scored===conceded?1:0,draw:scored===conceded}});
  const avg=(arr,key)=>arr.length?arr.reduce((n,x)=>n+x[key],0)/arr.length:null;
  const home=details.filter(x=>x.home),away=details.filter(x=>!x.home);
- return {played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored')};
+ return {last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored')};
 }
 function ranks(standings,id){
  const groups=standings?.[0]?.league?.standings||[];
@@ -37,7 +37,7 @@ async function evaluate(g,key,date){
  const direct=h2h.value.filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
  if(hf.played<7||af.played<7||!hr||!ar||direct.length<2)return null;
- const homeRate=hf.points/(hf.played*3),awayRate=af.points/(af.played*3);
+ const homeRate=hf.last5Points/(hf.last5Played*3),awayRate=af.last5Points/(af.last5Played*3);
  const drawSignal=(hf.drawRate+af.drawRate)/2;
  const closeRanks=Math.abs(hr.rank-ar.rank)<=6;
  const balanced=Math.abs(homeRate-awayRate)<0.23;
@@ -60,7 +60,8 @@ async function evaluate(g,key,date){
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');
- const date=String(req.query?.date||'');
+ const date=String(req.query?.date||''),count=Number(req.query?.count||6);
+ if(!Number.isInteger(count)||count<6||count>10)return res.status(400).json({error:'6–10 Auswahlen wählen'});
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
@@ -70,17 +71,17 @@ export default async function handler(req,res){
   fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
   const selected=[],included=new Set(),represented=new Set();
   for(const g of fixtures){
-   if(selected.length===12)break;
+   if(selected.length===30)break;
    const league=String(g.league.id);
    if(represented.has(league))continue;
    represented.add(league);included.add(g.fixture.id);selected.push(g);
   }
   for(const g of fixtures){
-   if(selected.length===12)break;
+   if(selected.length===30)break;
    if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
   }
   const results=await Promise.allSettled(selected.map(g=>evaluate(g,key,date)));
-  const picks=results.filter(x=>x.status==='fulfilled'&&x.value).flatMap(x=>x.value).sort((a,b)=>b.score-a.score).slice(0,5);
-  return res.status(200).json({configured:true,date,picks,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice:'Tägliche Vorauswahl aus Tabellenstand, aktueller Form und H2H. Der Analyse-Index ist keine kalibrierte Gewinnwahrscheinlichkeit; das H2H ist nur ein schwaches Zusatzsignal. Fehlende Daten führen zum Ausschluss.'});
+  const picks=results.filter(x=>x.status==='fulfilled'&&x.value).flatMap(x=>x.value).sort((a,b)=>b.score-a.score).slice(0,count);
+  return res.status(200).json({configured:true,date,picks:picks.length>=count?picks:[],available:picks.length,complete:picks.length>=count,count,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice:(picks.length<count?'Nur '+picks.length+' geeignete Spiele. Keine vollständige '+count+'er-Kombi verfügbar. ':'')+'Tägliche Vorauswahl aus Tabellenstand, aktueller Form und H2H. Der Analyse-Index ist keine kalibrierte Gewinnwahrscheinlichkeit; das H2H ist nur ein schwaches Zusatzsignal. Fehlende Daten führen zum Ausschluss.'});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
