@@ -43,19 +43,26 @@ export default async function handler(req,res){
  }
  if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
  if(action==='squad'){
-  // API-Sports paginates team rosters; retrieve all pages, not just the first 20 players.
-  const first=await api('/players?team='+q.id+'&season='+q.season+'&page=1',key);
-  const roster=new Map(first.map(p=>[p.player?.id,p]).filter(([id])=>id));
-  // /players/squads lists the full current squad even for players without seasonal stats.
-  try{
-   const squads=await api('/players/squads?team='+q.id,key);
-   for(const squad of squads)for(const p of squad.players||[]){
-    if(!p.id||roster.has(p.id))continue;
+  // The official squad endpoint lists the complete current team including bench players.
+  // Season player-stat pages are used to enrich entries, not to limit membership to 20.
+  const roster=new Map();
+  const [squadResult,firstResult]=await Promise.allSettled([
+   api('/players/squads?team='+q.id,key),
+   api('/players?team='+q.id+'&season='+q.season+'&page=1',key)
+  ]);
+  if(squadResult.status==='fulfilled'){
+   for(const squad of squadResult.value)for(const p of squad.players||[]){
+    if(!p.id)continue;
     roster.set(p.id,{player:{id:p.id,name:p.name,photo:p.photo,age:p.age},statistics:[{games:{position:p.position}}]});
    }
-  }catch{}
-  const extra=await Promise.allSettled([2,3,4,5].map(page=>api('/players?team='+q.id+'&season='+q.season+'&page='+page,key)));
-  for(const page of extra)if(page.status==='fulfilled')for(const p of page.value)if(p.player?.id)roster.set(p.player.id,p);
+  }
+  const first=firstResult.status==='fulfilled'?firstResult.value:[];
+  for(const p of first)if(p.player?.id)roster.set(p.player.id,p);
+  // If the complete squad feed is unavailable, fill remaining pages of the season roster.
+  if(roster.size<16&&first.length>=20){
+   const pages=await Promise.allSettled([2,3,4].map(page=>api('/players?team='+q.id+'&season='+q.season+'&page='+page,key)));
+   for(const page of pages)if(page.status==='fulfilled')for(const p of page.value)if(p.player?.id)roster.set(p.player.id,p);
+  }
   data=[...roster.values()].sort((a,b)=>String(a.player?.name||'').localeCompare(String(b.player?.name||''),'de'));
  }
  if(action==='detail'){
