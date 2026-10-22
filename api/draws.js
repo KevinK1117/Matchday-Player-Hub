@@ -1,16 +1,21 @@
 import {isTopFlight} from '../public/competitions.js';
 const ROOT='https://v3.football.api-sports.io';
-const cache=new Map();
+const cache=new Map(),pending=new Map();
+let activeRequests=0;const waiters=[];
+async function providerSlot(){if(activeRequests<3)activeRequests++;else await new Promise(resolve=>waiters.push(resolve));return ()=>{const next=waiters.shift();if(next)next();else activeRequests--}}
 async function api(path,key){
  const cached=cache.get(path);if(cached&&cached.until>Date.now())return cached.value;
+ if(pending.has(path))return pending.get(path);
+ const work=(async()=>{const release=await providerSlot();try{
  const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
  if(!response.ok)throw Error('API-Sports HTTP '+response.status);
  const body=await response.json();
- if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length))throw Error('API-Sports Datenlimit');
- const value=body.response||[];
- cache.set(path,{value,until:Date.now()+600000});if(cache.size>200)cache.delete(cache.keys().next().value);
- return value;
+ if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length))throw Error('API-Sports Datenabruf eingeschränkt');
+ const value=body.response||[];cache.set(path,{value,until:Date.now()+600000});if(cache.size>200)cache.delete(cache.keys().next().value);return value;
+ }finally{release()}})();
+ pending.set(path,work);try{return await work}finally{pending.delete(path)}
 }
+
 const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
 export function form(rows,id,date){
  const games=rows.filter(g=>completed(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
@@ -80,11 +85,12 @@ export default async function handler(req,res){
    if(selected.length===30)break;
    if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
   }
-  const results=await Promise.allSettled(selected.map(g=>evaluate(g,key,date)));
+  const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date))))}
   const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length};
   const candidates=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score).slice(0,count);
   const complete=candidates.length>=count;
-  const notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
+  let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
+  if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }

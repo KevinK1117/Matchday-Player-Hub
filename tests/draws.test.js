@@ -23,3 +23,10 @@ test('partial analysis exposes real candidates without claiming a complete combo
  let body,code=200;const res={setHeader(){},status(n){code=n;return this},json(d){body=d}};
  try{await handler({query:{date:'2099-10-22',count:'6'}},res);assert.equal(code,200);assert.equal(body.complete,false);assert.equal(body.picks.length,0);assert.equal(body.candidates.length,1);assert.equal(body.candidates[0].fixtureId,990001);assert.equal(body.diagnostics.providerErrors,0);assert.match(body.notice,/1 von 6/)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });
+test('analysis bounds provider concurrency and shares league standings requests',async()=>{
+ const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';let active=0,maxActive=0,standingsRequests=0;
+ const games=Array.from({length:4},(_,i)=>({fixture:{id:991000+i,date:'2099-10-23T18:00:00Z',status:{short:'NS'}},league:{id:39,name:'Premier League',country:'England',season:2027},teams:{home:{id:1000+i*2,name:'Home'},away:{id:1001+i*2,name:'Away'}}}));
+ globalThis.fetch=async input=>{active++;maxActive=Math.max(maxActive,active);const u=new URL(input);if(u.pathname==='/standings')standingsRequests++;await new Promise(r=>setTimeout(r,2));active--;return {ok:true,json:async()=>({response:u.pathname==='/fixtures'&&u.searchParams.has('date')?games:[]})}};
+ const res={setHeader(){},status(){return this},json(){}};
+ try{await handler({query:{date:'2099-10-23',count:'6'}},res);assert(maxActive<=3);assert.equal(standingsRequests,1)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
+});
