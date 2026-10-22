@@ -36,15 +36,16 @@ async function evaluate(g,key,date){
  const hf=form(home.value,h.id,date),af=form(away.value,a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
  const direct=h2h.value.filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- if(hf.played<6||af.played<6||!hr||!ar||!direct.length)return null;
+ if(hf.played<7||af.played<7||!hr||!ar||direct.length<2)return null;
  const homeRate=hf.points/(hf.played*3),awayRate=af.points/(af.played*3);
  const drawSignal=(hf.drawRate+af.drawRate)/2;
  const closeRanks=Math.abs(hr.rank-ar.rank)<=6;
  const balanced=Math.abs(homeRate-awayRate)<0.23;
  const h2hDraw=draws/direct.length;
- const drawScore=drawSignal*.55+h2hDraw*.25+(closeRanks?.1:0)+(balanced?.1:0);
+ // H2H is a context signal, not the strongest input; older matches may have different squads.
+ const drawScore=drawSignal*.65+h2hDraw*.15+(closeRanks?.1:0)+(balanced?.1:0);
  const picks=[];
- if(drawScore>=0.38&&drawSignal>=.22&&balanced)picks.push({type:'Unentschieden',team:'X',score:Math.round(drawScore*100),reason:'Remisquote Form '+Math.round(drawSignal*100)+' % · H2H '+draws+'/'+direct.length+' · Tabellenplätze '+hr.rank+'/'+ar.rank});
+ if(drawScore>=0.37&&drawSignal>=.25&&balanced)picks.push({type:'Unentschieden',team:'X',score:Math.round(drawScore*100),reason:'Remisquote Form '+Math.round(drawSignal*100)+' % · H2H '+draws+'/'+direct.length+' · Tabellenplätze '+hr.rank+'/'+ar.rank});
  const homeUnderdog=hr.rank>ar.rank+2&&homeRate<awayRate;
  const awayUnderdog=ar.rank>hr.rank+2&&awayRate<homeRate;
  if(homeUnderdog&&hf.homePlayed>=3&&hf.homePoints>=1.65&&af.awayPlayed>=3&&af.awayPoints<=1.3){
@@ -60,14 +61,14 @@ async function evaluate(g,key,date){
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');
  const date=String(req.query?.date||'');
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  const selected=fixtures.slice(0,18);
+  const selected=fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date)).slice(0,12);
   const results=await Promise.allSettled(selected.map(g=>evaluate(g,key,date)));
-  const picks=results.filter(x=>x.status==='fulfilled'&&x.value).flatMap(x=>x.value).sort((a,b)=>b.score-a.score).slice(0,6);
-  return res.status(200).json({configured:true,date,picks,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice:'Tägliche Vorauswahl aus Tabelle, Form (bis zu 10 Spiele) und H2H. Der Analyse-Score ist keine kalibrierte Gewinnwahrscheinlichkeit. Fehlende Daten führen zum Ausschluss.'});
+  const picks=results.filter(x=>x.status==='fulfilled'&&x.value).flatMap(x=>x.value).sort((a,b)=>b.score-a.score).slice(0,5);
+  return res.status(200).json({configured:true,date,picks,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice:'Tägliche Vorauswahl aus Tabellenstand, aktueller Form und H2H. Der Analyse-Index ist keine kalibrierte Gewinnwahrscheinlichkeit; das H2H ist nur ein schwaches Zusatzsignal. Fehlende Daten führen zum Ausschluss.'});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
