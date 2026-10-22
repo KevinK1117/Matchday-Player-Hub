@@ -66,7 +66,19 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  const selected=fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date)).slice(0,12);
+  // Balance coverage across competitions rather than taking only the earliest 12 kickoffs.
+  fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
+  const selected=[],included=new Set(),represented=new Set();
+  for(const g of fixtures){
+   if(selected.length===12)break;
+   const league=String(g.league.id);
+   if(represented.has(league))continue;
+   represented.add(league);included.add(g.fixture.id);selected.push(g);
+  }
+  for(const g of fixtures){
+   if(selected.length===12)break;
+   if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
+  }
   const results=await Promise.allSettled(selected.map(g=>evaluate(g,key,date)));
   const picks=results.filter(x=>x.status==='fulfilled'&&x.value).flatMap(x=>x.value).sort((a,b)=>b.score-a.score).slice(0,5);
   return res.status(200).json({configured:true,date,picks,considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice:'Tägliche Vorauswahl aus Tabellenstand, aktueller Form und H2H. Der Analyse-Index ist keine kalibrierte Gewinnwahrscheinlichkeit; das H2H ist nur ein schwaches Zusatzsignal. Fehlende Daten führen zum Ausschluss.'});
