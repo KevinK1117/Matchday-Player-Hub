@@ -24,6 +24,10 @@
       "dest": "/api/$1.js"
     },
     {
+      "src": "^/matchcenter$",
+      "dest": "/public/matchcenter-advanced.html"
+    },
+    {
       "src": "^/icon.svg$",
       "dest": "/public/icon.svg"
     },
