@@ -42,7 +42,22 @@ export default async function handler(req,res){
  data={profiles,recent,recentError,participation};
  }
  if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
- if(action==='squad')data=await api('/players?team='+q.id+'&season='+q.season+'&page=1',key);
+ if(action==='squad'){
+  // API-Sports paginates team rosters; retrieve all pages, not just the first 20 players.
+  const first=await api('/players?team='+q.id+'&season='+q.season+'&page=1',key);
+  const roster=new Map(first.map(p=>[p.player?.id,p]).filter(([id])=>id));
+  // /players/squads lists the full current squad even for players without seasonal stats.
+  try{
+   const squads=await api('/players/squads?team='+q.id,key);
+   for(const squad of squads)for(const p of squad.players||[]){
+    if(!p.id||roster.has(p.id))continue;
+    roster.set(p.id,{player:{id:p.id,name:p.name,photo:p.photo,age:p.age},statistics:[{games:{position:p.position}}]});
+   }
+  }catch{}
+  const extra=await Promise.allSettled([2,3,4,5].map(page=>api('/players?team='+q.id+'&season='+q.season+'&page='+page,key)));
+  for(const page of extra)if(page.status==='fulfilled')for(const p of page.value)if(p.player?.id)roster.set(p.player.id,p);
+  data=[...roster.values()].sort((a,b)=>String(a.player?.name||'').localeCompare(String(b.player?.name||''),'de'));
+ }
  if(action==='detail'){
  const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isTopFlight(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
  const paths={stats:'/fixtures/statistics?fixture='+q.id,events:'/fixtures/events?fixture='+q.id,lineups:'/fixtures/lineups?fixture='+q.id,h2h:'/fixtures/headtohead?h2h='+g.teams.home.id+'-'+g.teams.away.id+'&last=10',homeRecent:'/fixtures?team='+g.teams.home.id+'&last=10&status=FT-AET-PEN',awayRecent:'/fixtures?team='+g.teams.away.id+'&last=10&status=FT-AET-PEN',table:'/standings?league='+g.league.id+'&season='+g.league.season};
