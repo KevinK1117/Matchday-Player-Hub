@@ -3,8 +3,8 @@
   "short_name": "Matchday",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#001e28",
-  "theme_color": "#001e28",
+  "background_color": "#f6f8fb",
+  "theme_color": "#f6f8fb",
   "icons": [
     {
       "src": "/public/matchday-sports-192-v4.png",

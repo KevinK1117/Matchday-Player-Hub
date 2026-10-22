@@ -18,5 +18,5 @@ http.createServer(async(req,res)=>{
  const name=u.pathname==='/'?'index.html':u.pathname==='/matchcenter'?'public/matchcenter-advanced.html':u.pathname==='/manifest.webmanifest'?'public/manifest.webmanifest':u.pathname==='/icon.svg'?'public/icon.svg':u.pathname.slice(1);
  if(!['index.html','players.html'].includes(name)&&!name.startsWith('public/')){res.statusCode=404;return res.end('Not found')}
  const file=path.resolve(root,name);if(!file.startsWith(root+path.sep)){res.statusCode=403;return res.end()}
- try{const body=await fs.readFile(file);res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.webmanifest')?'application/manifest+json':'text/html;charset=utf-8');res.end(body)}catch{res.statusCode=404;res.end('Not found')}
+ try{const body=await fs.readFile(file);res.setHeader('Content-Type',file.endsWith('.css')?'text/css':file.endsWith('.js')?'text/javascript':file.endsWith('.svg')?'image/svg+xml':file.endsWith('.webmanifest')?'application/manifest+json':'text/html;charset=utf-8');res.end(body)}catch{res.statusCode=404;res.end('Not found')}
 }).listen(process.env.PORT||4173,'0.0.0.0');
