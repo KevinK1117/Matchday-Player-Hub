@@ -10,7 +10,27 @@ export default async function handler(req,res){
  try{let data;
  if(a==='fixtures'){data=(await fetchBerlinSchedule(String(q.date))).games.map(normalizeGame)}
  if(a==='table'){const rows=await fetchJson('/standings/now');data=rows.standings||[]}
- if(a==='squad'){const rows=await fetchJson('/club-stats/'+q.team+'/now');data=(rows.skaters||[]).map(p=>({...p,name:value(p.firstName)+' '+value(p.lastName)}))}
+ if(a==='squad'){
+  // Official NHL roster includes forwards, defenders AND goalies.
+  const [roster,stats]=await Promise.allSettled([fetchJson('/roster/'+q.team+'/current'),fetchJson('/club-stats/'+q.team+'/now')]);
+  const people=new Map();
+  if(roster.status==='fulfilled'){
+   for(const p of [...(roster.value.forwards||[]),...(roster.value.defensemen||[]),...(roster.value.goalies||[])]){
+    const playerId=p.id||p.playerId;if(!playerId)continue;
+    const name=[value(p.firstName),value(p.lastName)].filter(Boolean).join(' ').trim();
+    people.set(playerId,{playerId,name,firstName:p.firstName,lastName:p.lastName,headshot:p.headshot||null,positionCode:p.positionCode||null,jerseyNumber:p.sweaterNumber??null,goals:null,shots:null});
+   }
+  }
+  if(stats.status==='fulfilled'){
+   for(const p of [...(stats.value.skaters||[]),...(stats.value.goalies||[])]){
+    const id=p.playerId||p.id;if(!id)continue;
+    const existing=people.get(id)||{};
+    people.set(id,{...existing,...p,playerId:id,name:existing.name||[value(p.firstName),value(p.lastName)].filter(Boolean).join(' ').trim(),headshot:existing.headshot||p.headshot||null});
+   }
+  }
+  if(roster.status==='rejected'&&stats.status==='rejected')throw Error('NHL-Spielerkader nicht verfügbar');
+  data=[...people.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
+ }
  if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
  if(a==='player')data=await fetchJson('/player/'+q.id+'/landing');
  if(a==='detail'){
