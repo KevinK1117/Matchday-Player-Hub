@@ -20,3 +20,15 @@ test('NHL scoring uses games and shots instead of football minutes',()=>{
  const ps=games.slice(0,2).flatMap(g=>Array.from({length:4},(_,i)=>({id:g.fixture.id*100+i,fixtureId:g.fixture.id,name:'NHL '+i,sport:'nhl',GP:20,goals:7,shotsPerGame:3,ppgoals:2,participation:'Einsatz nicht bestätigt'})));
  const qs=ps.map(p=>({...quotes[0],playerId:p.id,fixtureId:p.fixtureId}));assert.equal(buildCombo(games,qs,8,now,ps).picks.length,8);assert.equal(buildCombo(games,qs,8,now,ps,true).picks.length,0);assert.equal(buildCombo(games,qs,8,now,ps.map(p=>({...p,GP:2}))).picks.length,0);
 });
+
+test('statistical player selection remains available without bookmaker prices',async()=>{
+ const {rankScorers}=await import('../public/combo.js');
+ const result=rankScorers(games,players,7,now);assert.equal(result.picks.length,7);assert.equal(result.complete,true);assert.equal(buildCombo(games,[],7,now,players).picks.length,0);assert(result.picks.every(p=>p.player.id!=null));
+});
+test('NHL analysis includes real candidates without prices and respects eligibility',async()=>{
+ const {rankScorers}=await import('../public/combo.js');
+ const ps=games.flatMap((g,i)=>Array.from({length:5},(_,j)=>({id:i*10+j,name:'NHL '+i+' '+j,fixtureId:g.fixture.id,sport:'nhl',GP:10,goals:4,shotsPerGame:3,ppgoals:2,participation:'Einsatz nicht bestätigt'})));
+ const r=rankScorers(games,ps,10,now);assert.equal(r.picks.length,10);for(const g of games)assert(r.picks.filter(p=>p.game.fixture.id===g.fixture.id).length<=4);
+ assert.equal(rankScorers(games,ps,7,now,true).picks.length,0);assert.equal(rankScorers(games,ps.map(p=>({...p,shotsPerGame:null})),7,now).picks.length,0);
+ assert.equal(rankScorers(games.map(g=>({...g,fixture:{...g.fixture,status:{short:'LIVE'}}})),ps,7,now).picks.length,0);
+});

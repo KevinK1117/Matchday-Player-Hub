@@ -25,7 +25,7 @@ export default async function handler(req,res){
     if(gp<1)continue;
     const goalsPerGame=goals/gp, shotsPerGame=shots==null?null:shots/gp;
     const score=goalsPerGame*0.58+(shotsPerGame??0)*0.11 + (ppgoals??0)/gp*0.20;
-    players.push({id:p.playerId,firstName:value(p.firstName),lastName:value(p.lastName),name:[value(p.firstName),value(p.lastName)].filter(Boolean).join(' '),team:club,position:p.positionCode,GP:gp,goals,shots,ppgoals,goalsPerGame,shotsPerGame,score, xg:null,ppToi:null,toi:null});
+    players.push({photo:p.headshot||null,id:p.playerId,firstName:value(p.firstName),lastName:value(p.lastName),name:[value(p.firstName),value(p.lastName)].filter(Boolean).join(' '),team:club,position:p.positionCode,GP:gp,goals,shots,ppgoals,goalsPerGame,shotsPerGame,score, xg:null,ppToi:null,toi:null});
    }
   }
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);

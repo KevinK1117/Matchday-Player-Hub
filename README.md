@@ -49,3 +49,7 @@ Deployment: Repository in Vercel importieren, `vercel.json` beibehalten, `API_SP
 ## Abschlussprüfung
 
 15 automatisierte Tests bestanden, einschließlich Topscorer-Abfragen ohne Spieler-ID und Erstliga-Katalog. Liga-Auswahl wird zusätzlich über `/api/matchcenter?action=leagues` geladen; die aktuelle Saison kommt aus dem Anbieter-Katalog. Die neue Topscorer-Hauptansicht funktioniert unabhängig von Begegnungen am Spieltag. Die lokale Route `/matchcenter` entspricht der Vercel-Route.
+
+## Spieler unabhängig von Quoten
+
+Die Torschützenauswahl zeigt jetzt 6–10 statistisch geeignete Spieler auch ohne Quotenfeed. Es gelten weiterhin Mindestdaten, geplante Begegnungen, bis zu vier Spieler pro Begegnung und der optionale Filter für bestätigte Einsätze. Der Hinweis „Statistische Auswahl“ trennt diese Kandidaten von einer geprüften Buchmacher-Kombi. Einzel- und Gesamtquoten werden nur bei tatsächlich verifizierten Angeboten angezeigt. Alle Spieleransichten verwenden Fotos und bei fehlendem Foto ein ausdrücklich markiertes Ersatzbild. 19 automatisierte Tests bestanden.

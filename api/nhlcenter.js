@@ -11,7 +11,7 @@ export default async function handler(req,res){
  if(a==='fixtures'){data=(await fetchBerlinSchedule(String(q.date))).games.map(normalizeGame)}
  if(a==='table'){const rows=await fetchJson('/standings/now');data=rows.standings||[]}
  if(a==='squad'){const rows=await fetchJson('/club-stats/'+q.team+'/now');data=(rows.skaters||[]).map(p=>({...p,name:value(p.firstName)+' '+value(p.lastName)}))}
- if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
+ if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
  if(a==='player')data=await fetchJson('/player/'+q.id+'/landing');
  if(a==='detail'){
  const box=await fetchJson('/gamecenter/'+q.id+'/boxscore'),g=normalizeGame(box),season=String(box.season||'');
