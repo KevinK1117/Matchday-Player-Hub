@@ -45,3 +45,7 @@ Die Startseite öffnet das Matchcenter mit dunkelblauem Kopf, pinken Akzenten un
 Remis-/Außenseiteranalyse: 6–10 verschiedene Begegnungen, Tabellenstand, Formpunkte der letzten fünf abgeschlossenen Spiele, Heim-/Auswärtsform und H2H. Maximal 30 Spiele je Anfrage werden geprüft; fehlende Auswahlplätze werden nicht aufgefüllt. Außenseiterdefinition anhand der Tabelle, nicht anhand einer verifizierten Marktquote. Kein kalibriertes Wahrscheinlichkeitsmodell. API-Sports-Key in Vercel serverseitig setzen. Der vorherige Konfigurator bleibt unter `/public/goal-combo.html` erreichbar.
 
 Deployment: Repository in Vercel importieren, `vercel.json` beibehalten, `API_SPORTS_KEY` als geheime Umgebungsvariable konfigurieren. Reale Daten und Bilder hängen von Anbietererreichbarkeit, Lizenz und Tarif ab.
+
+## Abschlussprüfung
+
+15 automatisierte Tests bestanden, einschließlich Topscorer-Abfragen ohne Spieler-ID und Erstliga-Katalog. Liga-Auswahl wird zusätzlich über `/api/matchcenter?action=leagues` geladen; die aktuelle Saison kommt aus dem Anbieter-Katalog. Die neue Topscorer-Hauptansicht funktioniert unabhängig von Begegnungen am Spieltag. Die lokale Route `/matchcenter` entspricht der Vercel-Route.

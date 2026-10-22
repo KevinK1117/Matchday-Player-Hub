@@ -33,7 +33,7 @@ async function evaluate(g,key,date){
   api('/standings?league='+g.league.id+'&season='+g.league.season,key)
  ]);
  if(home.status!=='fulfilled'||away.status!=='fulfilled'||standings.status!=='fulfilled'||h2h.status!=='fulfilled')return null;
- const hf=form(home.value,h.id,date),af=form(away.value,a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
+ const hf=form(home.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),h.id,date),af=form(away.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
  const direct=h2h.value.filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
  if(hf.played<7||af.played<7||!hr||!ar||direct.length<2)return null;

@@ -12,21 +12,22 @@ const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
- if(!['fixtures','detail','table','player','squad','scorers'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','detail','table','player','squad','scorers','leagues'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['detail','player','squad','scorers'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['detail','player','squad'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
  let data;
+ if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isTopFlight({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
  if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league));
- if(action==='table'){
+ if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
  if(!competitions.some(c=>isTopFlight({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur nationale Erstligen sind freigeschaltet'});
- data=await api('/standings?league='+q.league+'&season='+q.season,key);
+ if(action==='table')data=await api('/standings?league='+q.league+'&season='+q.season,key);
  }
  if(action==='player'){
  const profiles=await api('/players?id='+q.id+'&season='+q.season,key);
