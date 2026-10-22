@@ -33,3 +33,7 @@ Sportwechsel zwischen Fußball und Eishockey (NHL), mit eigener Spieltagsliste, 
 NHL-Tage werden anhand der Anstoßzeit in Europe/Berlin bestimmt, inklusive Spielen des nordamerikanischen Vortags. Für echte NHL-Torschützenquoten wird `THE_ODDS_API_KEY` oder der konfigurierte lizenzierte Quotenfeed benötigt. Mindestens fünf Spiele, ein Saisontor und verfügbare Schüsse sind Voraussetzung für das NHL-Ranking. Die Auswahl hält Fußball- und NHL-Statistikmaßstäbe getrennt.
 
 Bei mehreren Spielern aus derselben Begegnung wird keine tatsächliche Gesamtquote behauptet. Die Märkte sind abhängig; der Buchmacher muss die Kombinierbarkeit und seine Kombiquote bestätigen. Einzelquoten werden weiter angezeigt. Maximal vier verschiedene Spieler pro Spiel, 6–10 insgesamt, alle Quoten desselben Buchmachers.
+
+## Blau-Weiß und Wettbewerbsauswahl
+
+Die Hauptoberfläche nutzt wieder einen hellen blau-weißen Stil. Fußball-Spieltag und Torschützenkandidaten sind auf nationale Männer-Erstligen weltweit begrenzt; Zweitligen, Pokale, internationale Klubwettbewerbe sowie Jugend- und Frauenligen werden ausgeschlossen. NHL bleibt separat verfügbar. Die Klassifikation in `public/competitions.js` gleicht Land und exakte Wettbewerbsnamen beziehungsweise bekannte Anbieter-Aliasse ab. Unbekannte Wettbewerbe werden nicht automatisch als Erstliga eingestuft. Die tatsächliche Länder-, Saison- und Statistikabdeckung hängt vom Sportdatenanbieter ab. Weitere freigegebene Erstligen des geladenen Spieltags erscheinen automatisch in der Seitenleiste.

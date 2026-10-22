@@ -1,3 +1,4 @@
+import {isTopFlight} from '../public/competitions.js';
 const cache = new Map();
 const ROOT = 'https://v3.football.api-sports.io';
 async function api(path,key){
@@ -21,14 +22,18 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
  let data;
- if(action==='fixtures')data=await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key);
- if(action==='table')data=await api('/standings?league='+q.league+'&season='+q.season,key);
+ if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league));
+ if(action==='table'){
+ const competitions=await api('/leagues?id='+q.league,key);
+ if(!competitions.some(c=>isTopFlight({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur nationale Erstligen sind freigeschaltet'});
+ data=await api('/standings?league='+q.league+'&season='+q.season,key);
+ }
  if(action==='player'){
  const profiles=await api('/players?id='+q.id+'&season='+q.season,key);
  const team=profiles[0]?.statistics?.[0]?.team?.id;
  let recent=[],recentError=null;
  if(team){try{
- const fixtures=(await api('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
+ const fixtures=(await api('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isTopFlight(g.league)).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
  recent=await Promise.all(fixtures.map(async g=>{try{const sides=await api('/fixtures/players?fixture='+g.fixture.id,key);const entry=sides.flatMap(s=>s.players||[]).find(p=>Number(p.player.id)===Number(q.id));const st=entry?.statistics?.[0];return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,minutes:st?.games?.minutes??null,goals:st?.goals?.total??null,shots:st?.shots?.total??null,onTarget:st?.shots?.on??null,available:!!st};}catch{return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,available:false}}}));
  }catch{recentError='Letzte Spiele nicht verfügbar'}}
  let participation='Keine kommende Begegnung verfügbar';
@@ -37,9 +42,9 @@ export default async function handler(req,res){
  }
  if(action==='squad')data=await api('/players?team='+q.id+'&season='+q.season+'&page=1',key);
  if(action==='detail'){
- const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g)return res.status(404).json({error:'Begegnung nicht gefunden'});
+ const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isTopFlight(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
  const paths={stats:'/fixtures/statistics?fixture='+q.id,events:'/fixtures/events?fixture='+q.id,lineups:'/fixtures/lineups?fixture='+q.id,h2h:'/fixtures/headtohead?h2h='+g.teams.home.id+'-'+g.teams.away.id+'&last=10',homeRecent:'/fixtures?team='+g.teams.home.id+'&last=10&status=FT-AET-PEN',awayRecent:'/fixtures?team='+g.teams.away.id+'&last=10&status=FT-AET-PEN',table:'/standings?league='+g.league.id+'&season='+g.league.season};
- const entries=await Promise.all(Object.entries(paths).map(async([name,path])=>{try{return [name,{data:await api(path,key),error:null}]}catch{return [name,{data:[],error:'Daten nicht verfügbar'}]}}));data={fixture:g,...Object.fromEntries(entries)};
+ const entries=await Promise.all(Object.entries(paths).map(async([name,path])=>{try{const rows=await api(path,key);return [name,{data:['h2h','homeRecent','awayRecent'].includes(name)?rows.filter(x=>isTopFlight(x.league)):rows,error:null}]}catch{return [name,{data:[],error:'Daten nicht verfügbar'}]}}));data={fixture:g,...Object.fromEntries(entries)};
  }
  return res.status(200).json({configured:true,data,source:'API-Sports',updatedAt:new Date().toISOString()});
  }catch{return res.status(502).json({error:'Sportdaten konnten nicht geladen werden. Bitte später erneut versuchen oder API-Tarif prüfen.'})}
