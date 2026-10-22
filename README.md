@@ -1,10 +1,10 @@
 # Matchday
 
-Deutschsprachiges Fußball-Matchcenter für GitHub und Vercel. Eigenständige Oberfläche mit Ergebnissen, Ligafiltern, Datumsauswahl, lokalen Favoriten, Tabellen, H2H, letzten Spielen, Ereignissen, Aufstellungen und Spielerprofilen. Der frühere Spieler-Hub bleibt unter `/players.html` verfügbar.
+Deutschsprachiges Fußball- und NHL-Matchcenter für GitHub und Vercel. Eigenständige Oberfläche mit Ergebnissen, Ligafiltern, Datumsauswahl, lokalen Favoriten, Tabellen, H2H, letzten Spielen, Ereignissen, Aufstellungen und Spielerprofilen. Der frühere Spieler-Hub bleibt unter `/players.html` verfügbar.
 
 ## Torschützen-Kombi
 
-6–10 Spieler im Markt **trifft jederzeit**. Keine 1X2-Auswahlen. Maximal ein Spieler pro Begegnung; alle Quoten stammen vom selben Buchmacher. Nur zukünftige, noch nicht gestartete Spiele; Quoten höchstens sechs Stunden alt und mit eindeutigem Spielerabgleich. Mindestbasis: 270 Saisonminuten, 45 Minuten pro Einsatz, mindestens ein Tor und verfügbare Schüsse aufs Tor. Bekannte Nichtstarter werden ausgeschlossen; optional ausschließlich bestätigte Startelf. Keine Auffüllung bei zu wenigen geeigneten Spielern.
+6–10 Spieler im Markt **trifft jederzeit**. Keine 1X2-Auswahlen. Maximal vier Spieler pro Begegnung; alle Quoten stammen vom selben Buchmacher. Nur zukünftige, noch nicht gestartete Spiele; Quoten höchstens sechs Stunden alt und mit eindeutigem Spielerabgleich. Mindestbasis: 270 Saisonminuten, 45 Minuten pro Einsatz, mindestens ein Tor und verfügbare Schüsse aufs Tor. Bekannte Nichtstarter werden ausgeschlossen; optional ausschließlich bestätigte Startelf. Keine Auffüllung bei zu wenigen geeigneten Spielern.
 
 Das Ranking nutzt Tore/90, Schüsse aufs Tor pro Einsatz und Spielzeit; bei vorhandenem Feed zusätzlich xG/90. Es ist keine kalibrierte Trefferwahrscheinlichkeit. Die Kandidatenquelle ist der bestehende Liga-Topscorer-Endpunkt und daher kein vollständiger Kader. Keine automatische Wettabgabe.
 
@@ -24,4 +24,12 @@ Schlüssel gehören ausschließlich in serverseitige Umgebungsvariablen. Keine Z
 
 ## Prüfstand
 
-Syntaxprüfung für Browsermodul und neue Servermodule bestanden. Automatisierte Tests decken 6–10 Auswahlen, korrekte Quotenprodukte, doppelte Begegnungen, Buchmachertrennung, veraltete Quoten, laufende Spiele, falsche Märkte, Spielerabgleich, Mindestdaten, Startelfoption sowie Eingabevalidierung ab. Browserprüfung in der Erstellungsumgebung war mangels Preview-Supervisor nicht möglich. Echtdatenprüfung setzt einen autorisierten Vercel-Projektzugang und passenden API-Tarif voraus.
+Syntaxprüfung für Browsermodul und neue Servermodule bestanden. Automatisierte Tests decken 6–10 Auswahlen, korrekte Quotenprodukte, höchstens vier Spieler je Begegnung und doppelte Spieler, Buchmachertrennung, veraltete Quoten, laufende Spiele, falsche Märkte, Spielerabgleich, Mindestdaten, Startelfoption sowie Eingabevalidierung ab. Browserprüfung in der Erstellungsumgebung war mangels Preview-Supervisor nicht möglich. Echtdatenprüfung setzt einen autorisierten Vercel-Projektzugang und passenden API-Tarif voraus.
+
+## NHL-Erweiterung
+
+Sportwechsel zwischen Fußball und Eishockey (NHL), mit eigener Spieltagsliste, aktueller NHL-Gesamttabelle, Skaterauswahl, Spielbericht, Saison-H2H, letzten Spielen und Torschützenprofilen. Profile priorisieren Tore/Spiel, Schüsse/Spiel, Schussquote, Powerplay-Tore und Eiszeit. Keine unbelegten xG- oder Reihenangaben. NHL-Tabellen, Kaderstatistiken und Profile zeigen den aktuellen Anbieterstand; H2H umfasst die jeweilige Saison.
+
+NHL-Tage werden anhand der Anstoßzeit in Europe/Berlin bestimmt, inklusive Spielen des nordamerikanischen Vortags. Für echte NHL-Torschützenquoten wird `THE_ODDS_API_KEY` oder der konfigurierte lizenzierte Quotenfeed benötigt. Mindestens fünf Spiele, ein Saisontor und verfügbare Schüsse sind Voraussetzung für das NHL-Ranking. Die Auswahl hält Fußball- und NHL-Statistikmaßstäbe getrennt.
+
+Bei mehreren Spielern aus derselben Begegnung wird keine tatsächliche Gesamtquote behauptet. Die Märkte sind abhängig; der Buchmacher muss die Kombinierbarkeit und seine Kombiquote bestätigen. Einzelquoten werden weiter angezeigt. Maximal vier verschiedene Spieler pro Spiel, 6–10 insgesamt, alle Quoten desselben Buchmachers.

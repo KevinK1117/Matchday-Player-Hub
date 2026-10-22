@@ -1,3 +1,4 @@
+import {fetchBerlinSchedule} from './nhl.js';
 // Odds from a licensed normalized feed, API-Sports football, or optional The Odds API.
 // Never infer sportsbook prices or turn a different betting market into "anytime scorer".
 const SPORTS=new Set(['nhl','football']);
@@ -76,7 +77,7 @@ const NHL_TEAMS={ANA:'Anaheim Ducks',BOS:'Boston Bruins',BUF:'Buffalo Sabres',CA
 async function nhlOdds(date){
  const key=process.env.THE_ODDS_API_KEY;if(!key)return null;
  const root='https://api.the-odds-api.com/v4/sports/icehockey_nhl',q='apiKey='+encodeURIComponent(key);
- const [schedule,events]=await Promise.all([json('https://api-web.nhle.com/v1/score/'+date),json(root+'/events?'+q)]);
+ const [schedule,events]=await Promise.all([fetchBerlinSchedule(date),json(root+'/events?'+q)]);
  const games=(schedule.games||[]).filter(g=>g.homeTeam?.abbrev&&g.awayTeam?.abbrev);
  const matches=[];
  for(const g of games){
@@ -119,3 +120,4 @@ export default async function handler(req,res){
  const result={configured:qs.length>0,source:providers.map(p=>p.source).join(' + ')||null,bookmakers:bookies,quotes:qs,updatedAt:new Date().toISOString(),availableOtherMarkets:providers.flatMap(p=>p.otherMarkets||[]).slice(0,15),notice:providers.map(p=>p.notice).filter(Boolean).join(' ')||(!providers.length?'Kein Quotenanbieter konfiguriert. Für NHL optional THE_ODDS_API_KEY hinterlegen.':'Keine geprüften Torschützenquoten vorhanden.'),issues:errors};
  cacheSet(k,result,10);return res.status(200).json(result);
 }
+

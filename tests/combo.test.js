@@ -8,3 +8,15 @@ test('reject stale prices, started matches, unverified players, bench, wrong mar
 test('never fills a short combo or combines different bookmakers',()=>{const r=buildCombo(games,quotes.map((q,i)=>({...q,bookmaker:i<5?'A':'B'})),6,now,players);assert.equal(r.picks.length,0);assert.equal(r.available,5)});
 test('confirmed-only option and ambiguous names',()=>{assert.equal(buildCombo(games,quotes,6,now,players.map(p=>({...p,participation:'Startelf nicht veröffentlicht'})),true).picks.length,0);const named=quotes.map(q=>({...q,playerId:null,playerName:players.find(p=>p.id===q.playerId).name}));assert.equal(buildCombo(games,named,6,now,players).picks.length,6);assert.equal(buildCombo(games,named,6,now,[...players,...players]).picks.length,0)});
 test('API validates inputs and handles missing credentials',async()=>{let code,body;const res={setHeader(){},status(c){code=c;return this},json(b){body=b}};await handler({query:{action:'player',id:'evil',season:'2026'}},res);assert.equal(code,400);await handler({query:{action:'fixtures',date:'2026-10-22'}},res);assert.equal(code,200);assert.equal(body.configured,false)});
+
+test('up to four different scorers per match; correlated total is not advertised',()=>{
+ const ps=games.slice(0,3).flatMap(g=>Array.from({length:6},(_,i)=>({...players[0],id:g.fixture.id*100+i,fixtureId:g.fixture.id,name:'P '+g.fixture.id+' '+i})));
+ const qs=ps.map(p=>({...quotes[0],playerId:p.id,fixtureId:p.fixtureId}));const r=buildCombo(games,qs,10,now,ps);
+ assert.equal(r.picks.length,10);assert.equal(r.correlated,true);assert.equal(r.total,null);assert.equal(new Set(r.picks.map(p=>p.player.id)).size,10);
+ for(const g of games)assert.ok(r.picks.filter(p=>p.fixtureId===g.fixture.id).length<=4);
+ const short=buildCombo(games,qs.filter(q=>q.fixtureId===1),6,now,ps);assert.equal(short.picks.length,0);assert.equal(short.available,4);
+});
+test('NHL scoring uses games and shots instead of football minutes',()=>{
+ const ps=games.slice(0,2).flatMap(g=>Array.from({length:4},(_,i)=>({id:g.fixture.id*100+i,fixtureId:g.fixture.id,name:'NHL '+i,sport:'nhl',GP:20,goals:7,shotsPerGame:3,ppgoals:2,participation:'Einsatz nicht bestätigt'})));
+ const qs=ps.map(p=>({...quotes[0],playerId:p.id,fixtureId:p.fixtureId}));assert.equal(buildCombo(games,qs,8,now,ps).picks.length,8);assert.equal(buildCombo(games,qs,8,now,ps,true).picks.length,0);assert.equal(buildCombo(games,qs,8,now,ps.map(p=>({...p,GP:2}))).picks.length,0);
+});

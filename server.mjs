@@ -6,7 +6,8 @@ import nhl from './api/nhl.js';
 import odds from './api/odds.js';
 import form from './api/form.js';
 import matchcenter from './api/matchcenter.js';
-const handlers={football,nhl,odds,form,matchcenter};
+import nhlcenter from './api/nhlcenter.js';
+const handlers={football,nhl,odds,form,matchcenter,nhlcenter};
 const root=process.cwd();
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');

@@ -1,14 +1,21 @@
 const ROOT='https://api-web.nhle.com/v1';
 const cache=new Map();
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const fetchJson=async(path)=>{const now=Date.now();const stored=cache.get(path);if(stored&&stored.expires>now)return stored.data;let r=await fetch(ROOT+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(r.status===429){if(stored)return stored.data;const err=new Error('NHL API 429: temporäre Anfragelimitierung');err.rateLimited=true;throw err}if(!r.ok){if(stored)return stored.data;throw Error(`NHL API ${r.status}`)}const data=await r.json();cache.set(path,{data,expires:now+(path.startsWith('/score/')?300000:1800000)});if(cache.size>300)cache.delete(cache.keys().next().value);return data};
-const value=o=>typeof o==='string'?o:o?.default||o?.en||'';
+export const fetchJson=async(path)=>{const now=Date.now();const stored=cache.get(path);if(stored&&stored.expires>now)return stored.data;let r=await fetch(ROOT+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(r.status===429){if(stored)return stored.data;const err=new Error('NHL API 429: temporäre Anfragelimitierung');err.rateLimited=true;throw err}if(!r.ok){if(stored)return stored.data;throw Error(`NHL API ${r.status}`)}const data=await r.json();cache.set(path,{data,expires:now+(path.startsWith('/score/')?300000:1800000)});if(cache.size>300)cache.delete(cache.keys().next().value);return data};
+export const value=o=>typeof o==='string'?o:o?.default||o?.en||'';
 const sec=v=>{if(typeof v==='number')return v;const m=/^(\d+):(\d\d)$/.exec(String(v||''));return m?+m[1]*60 + +m[2]:null};
+export async function fetchBerlinSchedule(date){
+ const d=new Date(date+'T12:00:00Z');if(!Number.isFinite(+d))throw Error('Ungültiges Datum');d.setUTCDate(d.getUTCDate()-1);
+ const results=await Promise.allSettled([fetchJson('/score/'+date),fetchJson('/score/'+d.toISOString().slice(0,10))]);
+ if(results.every(r=>r.status==='rejected'))throw results[0].reason;
+ const games=[...new Map(results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value.games||[]).map(g=>[g.id,g])).values()].filter(g=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(g.startTimeUTC))===date);
+ return {games};
+}
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=1200');
  const count=Math.min(10,Math.max(6,Number.parseInt(req.query.count,10)||8));const date=String(req.query.date||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  try{
-  const schedule=await fetchJson('/score/'+date);const games=(schedule.games||[]).map(g=>({id:g.id, start:g.startTimeUTC, state:g.gameState, away:g.awayTeam?.abbrev,home:g.homeTeam?.abbrev,awayName:value(g.awayTeam?.name)||g.awayTeam?.abbrev,homeName:value(g.homeTeam?.name)||g.homeTeam?.abbrev,awayScore:g.awayTeam?.score,homeScore:g.homeTeam?.score}));
+  const schedule=await fetchBerlinSchedule(date);const games=(schedule.games||[]).map(g=>({id:g.id, start:g.startTimeUTC, state:g.gameState, away:g.awayTeam?.abbrev,home:g.homeTeam?.abbrev,awayName:value(g.awayTeam?.name)||g.awayTeam?.abbrev,homeName:value(g.homeTeam?.name)||g.homeTeam?.abbrev,awayScore:g.awayTeam?.score,homeScore:g.homeTeam?.score}));
   const clubs=[...new Set(games.flatMap(g=>[g.home,g.away]))].filter(Boolean);
   const clubStats=await Promise.allSettled(clubs.map(async club=>({club,data:await fetchJson('/club-stats/'+club+'/now')})));
   const players=[];
@@ -68,3 +75,4 @@ export default async function handler(req,res){
   return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Aggressive ranking: Saison-Tore/Spiel, Schüsse/Spiel und PP-Tore; bei verfügbaren Protokollen zusätzlich Schüsse, Tore und Eiszeit der letzten fünf Spiele. Keine kalibrierte Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
+
