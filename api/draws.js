@@ -78,7 +78,7 @@ async function enrichCandidates(candidates,key,date,odds){
    if(side==='home'&&homeMissing>=3||side==='away'&&awayMissing>=3)score-=6;
    flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
   }else flags.push('Ausfalldaten nicht verfügbar');
-  return {...pick,score:Math.max(0,Math.min(100,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
+  return {...pick,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
     predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
     evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
  }));
@@ -134,7 +134,8 @@ async function evaluate(g,key,date,odds){
   const side=p.team==='X'?'draw':p.team.startsWith('1 ·')?'home':'away';
   const marketProbability=market?.[side]??null;
   // Odds are a separate plausibility check, never represented as a calibrated model probability.
-  const score=Math.max(0,Math.min(100,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
+  const score=Math.max(0,Math.min(90,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
+  // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
   return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score).slice(0,1)};
 }
@@ -150,15 +151,16 @@ export default async function handler(req,res){
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
   // Balance coverage across competitions rather than taking only the earliest 12 kickoffs.
   fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
+  const maxFixtures=Math.min(24,Math.max(18,count*2+6));
   const selected=[],included=new Set(),represented=new Set();
   for(const g of fixtures){
-   if(selected.length===30)break;
+   if(selected.length===maxFixtures)break;
    const league=String(g.league.id);
    if(represented.has(league))continue;
    represented.add(league);included.add(g.fixture.id);selected.push(g);
   }
   for(const g of fixtures){
-   if(selected.length===30)break;
+   if(selected.length===maxFixtures)break;
    if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
   }
   const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds))))}
