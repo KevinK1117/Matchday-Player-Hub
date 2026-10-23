@@ -24,10 +24,34 @@ export default async function handler(req,res){
    for(const p of r.value.data.skaters||[]){const gp=Number(p.gamesPlayed)||0,goals=Number(p.goals)||0,shots=p.shots==null?null:Number(p.shots);const ppgoals=p.powerPlayGoals==null?null:Number(p.powerPlayGoals);
     if(gp<1)continue;
     const goalsPerGame=goals/gp, shotsPerGame=shots==null?null:shots/gp;
-    const score=goalsPerGame*0.58+(shotsPerGame??0)*0.11 + (ppgoals??0)/gp*0.20;
+    const score=(goalsPerGame*0.58+(shotsPerGame??0)*0.11 + (ppgoals??0)/gp*0.20)*(.62+.38*Math.min(1,gp/12));
     players.push({photo:p.headshot||null,id:p.playerId,firstName:value(p.firstName),lastName:value(p.lastName),name:[value(p.firstName),value(p.lastName)].filter(Boolean).join(' '),team:club,position:p.positionCode,GP:gp,goals,shots,ppgoals,goalsPerGame,shotsPerGame,score, xg:null,ppToi:null,toi:null});
    }
   }
+  // Additional official NHL source: standings provide opponent goals against per game.
+  // Optional, so a temporary NHL API outage does not fabricate an easy/hard opponent.
+  let opponentDefenseAvailable=false;
+  try{
+    const table=await fetchJson('/standings/now');
+    const defence=new Map();
+    for(const row of table.standings||[]){
+      const team=value(row.teamAbbrev)||value(row.teamName);
+      const gp=Number(row.gamesPlayed),ga=Number(row.goalAgainst);
+      if(team&&gp>0&&Number.isFinite(ga)&&ga>=0)defence.set(team,ga/gp);
+    }
+    for(const p of players){
+      const game=games.find(g=>g.home===p.team||g.away===p.team);
+      const opp=game?(game.home===p.team?game.away:game.home):null;
+      const goalsAgainst=opp?defence.get(opp):null;
+      p.opponentGoalsAgainstPerGame=goalsAgainst??null;
+      if(goalsAgainst!=null){
+        const factor=Math.max(.83,Math.min(1.17,.84+goalsAgainst*.065));
+        p.score*=factor;
+        p.defenseAdjustment=Number(factor.toFixed(3));
+        opponentDefenseAvailable=true;
+      }
+    }
+  }catch{}
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
   // A large parallel fan-out caused NHL API 429. Enrich only selected top-ranked players, sequentially.
   const shortlist=players.slice(0,Math.min(count,players.length));
@@ -72,7 +96,7 @@ export default async function handler(req,res){
   const picked=[];const seen=new Set();
   for(const g of games){const p=eligiblePlayers.find(p=>(p.team===g.home||p.team===g.away)&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}
   for(const p of eligiblePlayers){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Aggressive ranking: Saison-Tore/Spiel, Schüsse/Spiel und PP-Tore; bei verfügbaren Protokollen zusätzlich Schüsse, Tore und Eiszeit der letzten fünf Spiele. Keine kalibrierte Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API'],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Ranking anhand von Saison-Toren/Spiel, Schüssen/Spiel, PP-Toren, Gegner-Defensivwerten und bei verfügbaren Protokollen der letzten fünf Spiele. Keine kalibrierte Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
 
