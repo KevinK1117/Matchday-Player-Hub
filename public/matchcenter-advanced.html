@@ -135,7 +135,7 @@ async function player(id,season,playerSport=sport){if(playerSport==='nhl'){await
 function renderScorerSelection(selection,priced,currentSport,oddsNote=''){
  const verified=priced?.picks?.length?priced:null,rows=verified?.picks||selection.picks;
  if(!rows.length){$('comboResult').innerHTML='<p class="result-status">Keine Spieler erfüllen die Analysefilter. '+($('confirmedOnly').checked?'Bestätigte Aufstellungen sind möglicherweise noch nicht veröffentlicht.':'Anderen Spieltag wählen oder Datenabdeckung prüfen.')+'</p>';return}
- $('comboResult').innerHTML=`<p class="result-status">${rows.length} Spieler ${selection.complete?'ausgewählt':'verfügbar'}. ${verified?'Quoten bei '+esc(verified.bookmaker)+' geprüft.':'Statistische Auswahl · noch keine geprüfte Wettkombi.'}</p><div class="scorer-grid">${rows.map((pick,i)=>{const p=pick.player,g=pick.game,nhl=currentSport==='nhl';return `<article class="scorer-card"><div class="scorer-market">Trifft jederzeit</div><button class="scorer-profile" data-player="${p.id}" data-season="${g.league.season}">${portrait(p.id,nhl,p.photo||p.headshot,p.team,g.league.season)}<span><small>#${i+1} · ${esc(p.team||'')}</small><strong>${esc(p.name)}</strong><small>Profil & Statistiken →</small></span></button><div class="scorer-match">${esc(g.teams.home.name)} – ${esc(g.teams.away.name)}</div><div class="scorer-metrics"><span><b>${nhl?(p.goals/p.GP).toFixed(2):(p.goals*90/p.minutes).toFixed(2)}</b> ${nhl?'Tore/Spiel':'Tore/90'}</span><span><b>${Number(p.shotsPerGame).toFixed(1)}</b> aufs Tor/Spiel</span><span><b>${nhl?fmt(p.ppgoals):fmt(p.minutesPerGame?.toFixed(0))}</b> ${nhl?'PP-Tore':'Min./Spiel'}</span></div><small class="muted">${esc(p.participation||'Einsatz nicht bestätigt')}</small>${p.opponentGoalsAgainstPerGame!=null?'<div class="scorer-evidence">Gegner: Ø '+Number(p.opponentGoalsAgainstPerGame).toFixed(2)+' Gegentore/Spiel</div>':''}${p.last5Goals!=null?'<div class="scorer-evidence">Letzte 5 NHL-Spiele: '+esc(p.last5Goals)+' Tore · '+esc(p.last5Shots??'–')+' Schüsse</div>':''}${p.xG90!=null?'<div class="scorer-evidence">Verifiziertes xG/90: '+Number(p.xG90).toFixed(2)+'</div>':''}${p.questionable?'<div class="scorer-evidence">Einsatz fraglich – geringere Gewichtung</div>':''}<div class="scorer-odds">${verified?'Einzelquote '+Number(pick.decimal).toFixed(2):'Quote nicht verfügbar'}</div></article>`}).join('')}</div>`+(verified?`<div class="total"><span>${verified.correlated?'Kombiquote beim Buchmacher prüfen':'Gesamtquote'}</span><strong>${verified.total==null?'–':verified.total.toFixed(2)}</strong></div>`:`<p class="notice">${esc(oddsNote||'Spieleranalyse ist verfügbar. Aktuelle Torschützenquoten fehlen; deshalb keine Gesamtquote.')} Keine Wette wird platziert.</p>`);
+ $('comboResult').innerHTML=`<p class="result-status">${rows.length} Spieler ${selection.complete?'ausgewählt':'verfügbar'}. ${verified?'Quoten bei '+esc(verified.bookmaker)+' geprüft.':'Statistische Auswahl · noch keine geprüfte Wettkombi.'}</p><div class="scorer-grid">${rows.map((pick,i)=>{const p=pick.player,g=pick.game,nhl=currentSport==='nhl';return `<article class="scorer-card"><div class="scorer-market">Trifft jederzeit</div><button class="scorer-profile" data-player="${p.id}" data-season="${g.league.season}">${portrait(p.id,nhl,p.photo||p.headshot,p.team,g.league.season)}<span><small>#${i+1} · ${esc(p.team||'')}</small><strong>${esc(p.name)}</strong><small>Profil & Statistiken →</small></span></button><div class="scorer-match">${esc(g.teams.home.name)} – ${esc(g.teams.away.name)}</div><div class="scorer-metrics"><span><b>${nhl?(p.goals/p.GP).toFixed(2):(p.goals*90/p.minutes).toFixed(2)}</b> ${nhl?'Tore/Spiel':'Tore/90'}</span><span><b>${Number(p.shotsPerGame).toFixed(1)}</b> aufs Tor/Spiel</span><span><b>${nhl?fmt(p.ppgoals):fmt(p.minutesPerGame?.toFixed(0))}</b> ${nhl?'PP-Tore':'Min./Spiel'}</span></div><small class="muted">${esc(p.participation||'Einsatz nicht bestätigt')}</small>${p.opponentGoalsAgainstPerGame!=null?'<div class="scorer-evidence">Gegner: Ø '+Number(p.opponentGoalsAgainstPerGame).toFixed(2)+' Gegentore/Spiel</div>':''}${p.last5Goals!=null?'<div class="scorer-evidence">Letzte 5 NHL-Spiele: '+esc(p.last5Goals)+' Tore · '+esc(p.last5Shots??'–')+' Schüsse</div>':''}${p.recent3Goals!=null?'<div class="scorer-evidence">Letzte '+esc(p.recent3Games)+' Fußballspiele: '+esc(p.recent3Goals)+' Tore · '+esc(p.recent3Shots??'–')+' Schüsse aufs Tor</div>':''}${p.xG90!=null?'<div class="scorer-evidence">Verifiziertes xG/90: '+Number(p.xG90).toFixed(2)+'</div>':''}${p.questionable?'<div class="scorer-evidence">Einsatz fraglich – geringere Gewichtung</div>':''}<div class="scorer-odds">${verified?'Einzelquote '+Number(pick.decimal).toFixed(2):'Quote nicht verfügbar'}</div></article>`}).join('')}</div>`+(verified?`<div class="total"><span>${verified.correlated?'Kombiquote beim Buchmacher prüfen':'Gesamtquote'}</span><strong>${verified.total==null?'–':verified.total.toFixed(2)}</strong></div>`:`<p class="notice">${esc(oddsNote||'Spieleranalyse ist verfügbar. Aktuelle Torschützenquoten fehlen; deshalb keine Gesamtquote.')} Keine Wette wird platziert.</p>`);
 }
 async function generate(){
  if(!demoMode&&!games.some(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>Date.now())){$('comboResult').innerHTML='<p class="result-status">Keine kommenden Spiele für diesen Tag. Bitte einen anderen Tag wählen.</p>';return}
@@ -151,8 +151,38 @@ async function generate(){
    const cached=homeCache.get(homeKey());if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?':'/api/football?')+query,{signal:AbortSignal.timeout(60000)}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
   }
   if(token!==comboToken)return;
-  const selection=rankScorers(input,players,count,Date.now(),confirmed);
+  let selection=rankScorers(input,players,count,Date.now(),confirmed);
   renderScorerSelection(selection,null,currentSport,oddsNote||'Quoten werden separat geprüft.');
+  if(currentSport==='football'&&!demoMode&&selection.picks.length){
+    try{
+      const samples=selection.picks.slice(0,8).filter(x=>x.player.teamId&&x.game.league?.id&&x.game.league?.season)
+       .map(x=>[x.player.id,x.player.teamId,x.game.league.id,x.game.league.season].join(':'));
+      if(samples.length){
+        const u='/api/scorer-trends?'+new URLSearchParams({date:$('date').value,players:[...new Set(samples)].join(',')});
+        const response=await fetch(u,{signal:AbortSignal.timeout(18000)});
+        if(response.ok){
+          const trends=await response.json();
+          if(token!==comboToken)return;
+          for(const item of trends.players||[]){
+            const p=players.find(p=>Number(p.id)===Number(item.playerId)&&Number(p.teamId)===Number(item.teamId));
+            if(!p||!(item.fixtureCount>=2)||!(item.minutes>45))continue;
+            const recentGoals90=Number(item.goals)*90/Number(item.minutes);
+            const seasonGoals90=p.minutes>0?Number(p.goals)*90/p.minutes:0;
+            let adjust=1+Math.max(-.09,Math.min(.09,(recentGoals90-seasonGoals90)*.11));
+            if(item.shotDataCount>=2&&p.shotsPerGame!=null){
+              const shotDiff=(Number(item.shotsOnTarget)/Number(item.shotDataCount))-Number(p.shotsPerGame);
+              adjust+=Math.max(-.04,Math.min(.04,shotDiff*.035));
+            }
+            p.score=(Number(p.score)||0)*Math.max(.87,Math.min(1.13,adjust));
+            p.recent3Goals=item.goals;p.recent3Shots=item.shotDataCount>=2?item.shotsOnTarget:null;
+            p.recent3Games=item.fixtureCount;p.recent3Minutes=item.minutes;
+          }
+          selection=rankScorers(input,players,count,Date.now(),confirmed);
+          renderScorerSelection(selection,null,currentSport,'Spielerform der letzten bis zu drei Spiele zusätzlich geprüft, soweit verfügbar.');
+        }
+      }
+    }catch(e){/* Season and injury evidence remains available when recent fixture stats are restricted. */}
+  }
   if(oddsPromise){const odds=await oddsPromise;if(token!==comboToken)return;quotes=odds.quotes||[];oddsNote=currentSport==='nhl'&&!odds.configured?'NHL-Quoten sind nicht angebunden. Die Spieler-Auswahl basiert auf echten NHL-Statistiken.':quotes.length?'Nicht genügend aktuelle, eindeutig zugeordnete Torschützenquoten bei einem Buchmacher.':'Aktuelle Torschützenquoten sind nicht verfügbar. Die Spieleranalyse bleibt sichtbar.';
    const priced=buildCombo(input,quotes,count,Date.now(),players,confirmed);renderScorerSelection(selection,priced,currentSport,oddsNote);
   }
