@@ -12,7 +12,7 @@ export function buildCombo(games,quotes,count,now=Date.now(),players=[],confirme
  if(p.exclusionReason||p.participation==='Nicht in bestätigter Startelf'||confirmedOnly&&!(nhl?p.participation==='Bestätigter Einsatz':p.participation==='Startelf bestätigt')||!(p.goals>0))continue;
  if(nhl?!(p.GP>=5):!(p.minutes>=270&&p.minutesPerGame>=45))continue;
  const shotRate=Number(p.shotsPerGame);if(!Number.isFinite(shotRate)||shotRate<=0)continue;
- const score=nhl?(p.goals/p.GP)*4+Math.min(7,shotRate)*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,shotRate)*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
+ const score=Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,shotRate)*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,shotRate)*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
  const name=String(q.bookmaker),map=groups.get(name)||new Map(),id=String(q.fixtureId)+':'+p.id,old=map.get(id);
  const pick={...q,decimal:Number(q.decimal),game,player:p,score};
  if(!old||time>Date.parse(old.updatedAt))map.set(id,pick);groups.set(name,map);
@@ -35,7 +35,7 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
   if(confirmedOnly&&!(nhl?p.participation==='Bestätigter Einsatz':p.participation==='Startelf bestätigt'))continue;
   if(!(p.goals>0)||!Number.isFinite(Number(p.shotsPerGame))||!(Number(p.shotsPerGame)>0))continue;
   if(nhl?!(p.GP>=5):!(p.minutes>=270&&p.minutesPerGame>=45))continue;
-  const score=nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
+  const score=Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
   ranked.push({player:p,game,score});
  }
  const seen=new Set(),perGame=new Map(),eligible=[];
