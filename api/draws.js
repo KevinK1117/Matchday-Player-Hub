@@ -40,6 +40,50 @@ async function externalOdds(date){
  }catch(e){return {available:false,byFixture:new Map(),source:null,error:String(e.message).slice(0,80)}}
 }
 
+
+function providerPercent(value){
+ if(value==null)return null;
+ const n=Number(String(value).replace('%','').trim());
+ return Number.isFinite(n)&&n>=0&&n<=100?n/100:null;
+}
+async function enrichCandidates(candidates,key,date,odds){
+ // Fetch predictions only for matches that passed form and table screening.
+ // Cap extra calls to protect the user's API-Sports quota.
+ let injuries=[],injuriesAvailable=false;
+ try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
+ const limited=candidates.slice(0,15);
+ const enriched=await Promise.all(limited.map(async pick=>{
+  let model=null,modelSource=null,modelError=null;
+  try{
+   const result=await api('/predictions?fixture='+pick.fixtureId,key);
+   const percent=result?.[0]?.predictions?.percent||{};
+   const probs={home:providerPercent(percent.home),draw:providerPercent(percent.draw),away:providerPercent(percent.away)};
+   if(Object.values(probs).every(x=>x!=null)){model=probs;modelSource='API-Sports Prognosemodell';}
+  }catch(e){modelError='Prognosemodell nicht verfügbar';}
+  const side=pick.type==='Unentschieden'?'draw':pick.team.startsWith('1 ·')?'home':'away';
+  const predictionProbability=model?.[side]??null;
+  const problems=injuries.filter(x=>Number(x.fixture?.id)===Number(pick.fixtureId));
+  const missing=problems.filter(x=>/Missing Fixture/i.test(String(x.player?.type||x.type||'')));
+  const homeMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.home)).length;
+  const awayMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.away)).length;
+  let score=pick.score,flags=[];
+  if(predictionProbability!=null){
+   if(predictionProbability<.13)return null;
+   if(predictionProbability<.20)score-=10;
+   else if(predictionProbability>=.34)score+=5;
+   flags.push('Zweite Prognose '+Math.round(predictionProbability*100)+' % (Anbieter, nicht kalibriert)');
+  }else flags.push('Zweite Prognose nicht verfügbar');
+  if(injuriesAvailable){
+   if(side==='home'&&homeMissing>=5||side==='away'&&awayMissing>=5)return null;
+   if(side==='home'&&homeMissing>=3||side==='away'&&awayMissing>=3)score-=6;
+   flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
+  }else flags.push('Ausfalldaten nicht verfügbar');
+  return {...pick,score:Math.max(0,Math.min(100,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
+    predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
+    evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
+ }));
+ return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
+}
 const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
 export function form(rows,id,date){
  const games=rows.filter(g=>completed(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
@@ -91,7 +135,7 @@ async function evaluate(g,key,date,odds){
   const marketProbability=market?.[side]??null;
   // Odds are a separate plausibility check, never represented as a calibrated model probability.
   const score=Math.max(0,Math.min(100,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
-  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},h2h:{played:direct.length,draws}};
+  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score).slice(0,1)};
 }
 export default async function handler(req,res){
@@ -119,10 +163,12 @@ export default async function handler(req,res){
   }
   const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds))))}
   const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length};
-  const candidates=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score).slice(0,count);
+  const preliminary=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
+  const evidence=await enrichCandidates(preliminary,key,date,odds);
+  const candidates=evidence.candidates.slice(0,count);
   const complete=candidates.length>=count;
   let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
-  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: fixtures, form, standings, H2H',...(odds.available?['Lizenzierter externer Quotenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
