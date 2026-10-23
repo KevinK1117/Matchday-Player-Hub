@@ -91,7 +91,7 @@ function lineupCard(p,teamSport,season,teamAbbrev){
 }
 function pitchRow(players,teamSport,season,abbrev){return '<div class="pitch-line">'+players.map(p=>lineupCard(p,teamSport,season,abbrev)).join('')+'</div>'}
 function pitchView(team,lines,teamSport,season,tag,notice){
- return '<section class="lineup-preview"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+esc(tag)+'</span></div></div><p class="muted lineup-notice">'+esc(notice)+'</p><div class="pitch">'+lines.map(row=>pitchRow(row,teamSport,season,team.abbrev)).join('')+'</div></section>';
+ return '<section class="lineup-preview"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+esc(tag)+'</span></div></div><p class="muted lineup-notice">'+esc(notice)+'</p><div class="pitch" data-sport="'+esc(teamSport)+'">'+lines.map(row=>pitchRow(row,teamSport,season,team.abbrev)).join('')+'</div></section>';
 }
 function footballPosition(row){const x=String(row.statistics?.[0]?.games?.position||row.player?.position||'').toLowerCase();return x.includes('goal')?'G':x.includes('defen')?'D':x.includes('mid')?'M':x.includes('attack')||x.includes('forward')?'F':'?'}
 function projectedFootball(rows,team,season){
