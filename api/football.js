@@ -28,9 +28,26 @@ const lineupResults=await Promise.allSettled(games.map(async g=>{
   return {fixtureId:g.id,ids,published:rows.some(side=>(side.startXI||[]).length>0),sides:rows.map(side=>({teamId:side.team?.id,formation:side.formation||null,starters:(side.startXI||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos})),bench:(side.substitutes||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos}))}))};
 }));
 const lineups=new Map(lineupResults.filter(x=>x.status==='fulfilled').map(x=>[x.value.fixtureId,x.value]));
+let injuries=[],injuriesAvailable=false,injuryError=null;
+try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}
+catch(e){injuryError=String(e.message||e).slice(0,80)}
+const byFixturePlayer=new Map();
+for(const item of injuries){
+ const fixtureId=item.fixture?.id,playerId=item.player?.id;
+ if(fixtureId!=null&&playerId!=null)byFixturePlayer.set(String(fixtureId)+':'+String(playerId),item);
+}
+
 for(const p of playerByKey.values()){
   const l=lineups.get(p.fixtureId);
   p.participation=l?.published?(l.ids.has(p.id)?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf nicht veröffentlicht';
+  const injury=byFixturePlayer.get(String(p.fixtureId)+':'+String(p.id));
+  if(injury){
+   const type=String(injury.player?.type||injury.type||'');
+   p.injuryReason=String(injury.player?.reason||injury.reason||'')||null;
+   if(/missing fixture/i.test(type)){p.unavailable=true;p.participation='Ausfall gemeldet';}
+   else if(/questionable/i.test(type)){p.questionable=true;p.participation=l?.published&&l.ids.has(p.id)?'Startelf bestätigt':'Einsatz fraglich';}
+  }
+
 }
 let xgInfo='Keine xG-Datenquelle konfiguriert';
 try{
@@ -49,15 +66,43 @@ try{
   if(process.env.XG_FEED_URL)xgInfo=`Externer xG-Feed: ${populated} Spieler abgeglichen`;
 }catch(err){xgInfo='xG-Feed nicht erreichbar: '+String(err.message).slice(0,90)}
 // Only trust lineup evidence for the corresponding fixture. A known bench player is not a confirmed starter.
+// Opponent defensive averages provide additional context for the highest-ranked candidate teams.
+// Limit calls to avoid exhausting API-Sports daily quotas.
+const likely=[...playerByKey.values()].sort((a,b)=>b.score-a.score).slice(0,15);
+const opponentEntries=new Map();
+for(const p of likely){
+ const match=games.find(g=>g.id===p.fixtureId);if(!match)continue;
+ const opponentId=match.homeId===p.teamId?match.awayId:match.homeId;
+ const k=match.leagueId+':'+match.season+':'+opponentId;
+ if(!opponentEntries.has(k))opponentEntries.set(k,{league:match.leagueId,season:match.season,team:opponentId});
+}
+const opponentStats=new Map();
+const statsKeys=[...opponentEntries].slice(0,8);
+const defensiveResults=await Promise.allSettled(statsKeys.map(async([id,p])=>({id,rows:await api('/teams/statistics?league='+p.league+'&season='+p.season+'&team='+p.team,key)})));
+for(const r of defensiveResults){
+ if(r.status!=='fulfilled')continue;
+ const v=r.value.rows?.goals?.against?.average?.total;
+ const goalsAgainst=v==null?null:Number(v);
+ if(goalsAgainst!=null&&Number.isFinite(goalsAgainst)&&goalsAgainst>=0&&goalsAgainst<10)opponentStats.set(r.value.id,goalsAgainst);
+}
 for(const p of playerByKey.values()){
   const lineup=lineups.get(p.fixtureId);
-  if(lineup?.published && !lineup.ids.has(p.id)){p.score=-Infinity;p.exclusionReason='Nicht in bestätigter Startelf'}
+  if(p.unavailable){p.score=-Infinity;p.exclusionReason='Ausfall für diese Begegnung gemeldet'}
+  else if(lineup?.published && !lineup.ids.has(p.id)){p.score=-Infinity;p.exclusionReason='Nicht in bestätigter Startelf'}
   else {
-    const minutesFactor=Math.min(1,Math.max(0,(p.minutesPerGame||0)/85));
+    const minutesFactor=Math.min(1,Math.max(0,(p.minutesPerGame||0)/90));
+    const availabilityFactor=p.questionable?.68:1;
+    const sampleFactor=.65+.35*Math.min(1,p.appearances/12);
     const involvement=p.shotsPerGame==null?0:Math.min(4,p.shotsPerGame);
-    p.score=(p.goalsPerGame*4+involvement*1.4+(p.penaltyGoals>0?0.25:0))*minutesFactor;
-    if(p.xG90!=null)p.score+=Math.min(1.5,p.xG90)*2;
-    p.exclusionReason=(p.minutesPerGame||0)<35?'Zu geringe durchschnittliche Einsatzzeit':null;
+    const match=games.find(g=>g.id===p.fixtureId);
+    const opponentId=match?(match.homeId===p.teamId?match.awayId:match.homeId):null;
+    const defensiveKey=match?match.leagueId+':'+match.season+':'+opponentId:null;
+    const ga=opponentStats.get(defensiveKey);
+    p.opponentGoalsAgainstPerGame=ga??null;
+    const defenceFactor=ga==null?1:Math.min(1.22,Math.max(.8,.80+ga*.14));
+    p.score=(p.goalsPerGame*4+involvement*1.4+(p.penaltyGoals>0?0.25:0))*minutesFactor*sampleFactor*availabilityFactor*defenceFactor;
+    if(p.xG90!=null)p.score+=Math.min(1.5,p.xG90)*1.5*minutesFactor;
+    p.exclusionReason=(p.minutesPerGame||0)<45?'Zu geringe durchschnittliche Einsatzzeit':null;
   }
 }
 let players=[...playerByKey.values()].filter(p=>!p.exclusionReason&&Number.isFinite(p.score)).sort((a,b)=>b.score-a.score||b.minutesPerGame-a.minutesPerGame);if(confirmedOnly){ // Upcoming games have no officially confirmed lineup in this API response.
@@ -65,6 +110,6 @@ players=players.filter(p=>p.participation==='Startelf bestätigt');}
 // Spread initial candidates across matches, then fill any remaining places globally.
 const picked=[];const seen=new Set();for(const g of games){const p=players.find(p=>p.fixtureId===g.id&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
 const lineupDisplay=games.map(g=>({fixtureId:g.id,confirmed:!!lineups.get(g.id)?.published,teams:lineups.get(g.id)?.sides||[]}));
-const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 35 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte','API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[])],dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
 
