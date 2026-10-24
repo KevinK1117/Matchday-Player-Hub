@@ -25,7 +25,13 @@ function footballLeagueOptions(){
  // Use the API's real league IDs, rather than guessed IDs for the Nordic second tiers.
  for(const g of games){if(!seen.has(g.league.id)){seen.add(g.league.id);discovered.push([g.league.id,'⚽',g.league.country+' · '+g.league.name])}}
  for(const c of leagueCatalog){if(!seen.has(c.id)){seen.add(c.id);discovered.push([c.id,'⚽',c.country+' · '+c.name])}}
- const nordicSecond=x=>/(finland.+ykkosliiga|norway.+1\\s*division|sweden.+superettan|denmark.+1\\s*(division|stdivision))/i.test(x[2].normalize('NFKD').replace(/[\\u0300-\\u036f]/g,''));
+ const nordicSecond=x=>{
+  const label=String(x[2]||'').toLowerCase();
+  return (label.includes('finland')&&(label.includes('ykkösliiga')||label.includes('ykkosliiga')))
+    ||(label.includes('norway')&&label.includes('1. division'))
+    ||(label.includes('sweden')&&label.includes('superettan'))
+    ||(label.includes('denmark')&&(label.includes('1. division')||label.includes('1st division')));
+ };
  discovered.sort((a,b)=>Number(nordicSecond(b))-Number(nordicSecond(a))||a[2].localeCompare(b[2],'de'));
  return [...fixed.slice(0,3),...discovered.filter(nordicSecond),...fixed.slice(3),...discovered.filter(x=>!nordicSecond(x))];
 }
