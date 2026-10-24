@@ -90,7 +90,7 @@ export function form(rows,id,date){
  const details=games.map(g=>{const home=Number(g.teams.home.id)===Number(id),scored=Number(home?g.goals.home:g.goals.away),conceded=Number(home?g.goals.away:g.goals.home);return {home,scored,conceded,points:scored>conceded?3:scored===conceded?1:0,draw:scored===conceded}});
  const avg=(arr,key)=>arr.length?arr.reduce((n,x)=>n+x[key],0)/arr.length:null;
  const home=details.filter(x=>x.home),away=details.filter(x=>!x.home);
- return {last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored')};
+ return {last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored'),homeConceded:avg(home,'conceded'),awayConceded:avg(away,'conceded'),last5Scored:avg(details.slice(0,5),'scored'),last5Conceded:avg(details.slice(0,5),'conceded')};
 }
 function ranks(standings,id){
  const groups=standings?.[0]?.league?.standings||[];
@@ -110,33 +110,72 @@ async function evaluate(g,key,date,odds){
  const direct=(h2h.status==='fulfilled'?h2h.value:[]).filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
  if(hf.played<5||af.played<5||!hr||!ar)return {status:'insufficientData',picks:[]};
- const homeRate=hf.last5Points/(hf.last5Played*3),awayRate=af.last5Points/(af.last5Played*3);
+ const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
  const market=odds?.byFixture?.get(Number(g.fixture.id))||null;
- const drawSignal=(hf.drawRate+af.drawRate)/2;
- const closeRanks=Math.abs(hr.rank-ar.rank)<=6;
- const balanced=Math.abs(homeRate-awayRate)<0.23;
- const h2hDraw=direct.length?draws/direct.length:0;
- // H2H is a context signal, not the strongest input; older matches may have different squads.
- const drawScore=drawSignal*.45+h2hDraw*.08+(closeRanks?.08:0)+(balanced?.08:0)+Math.max(0,1-Math.abs(hf.homeScored-af.awayScored)/2)*.15+Math.max(0,1-Math.abs(hf.homePoints-af.awayPoints)/3)*.16;
- const picks=[];
- if(drawScore>=0.39&&drawSignal>=.25&&balanced&&Math.abs(hf.homeScored-af.awayScored)<1.1)picks.push({type:'Unentschieden',team:'X',score:Math.round(drawScore*100),reason:'Remisanteil '+Math.round(drawSignal*100)+' % · Heim-/Auswärtstore '+(hf.homeScored??0).toFixed(2)+'/'+(af.awayScored??0).toFixed(2)+' · H2H '+draws+'/'+direct.length+' · Tabellenplätze '+hr.rank+'/'+ar.rank});
- const homeUnderdog=hr.rank>ar.rank+2;
- const awayUnderdog=ar.rank>hr.rank+2;
- if(homeUnderdog&&hf.homePlayed>=3&&hf.homePoints>=1.65&&af.awayPlayed>=3&&af.awayPoints<=1.3&&hf.last5Points>=7){
-  const strength=hf.homePoints-af.awayPoints;
-  picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(Math.min(.85,.40+strength*.15+(direct.filter(x=>Number(x.teams.home.id)===Number(h.id)&&x.goals.home>x.goals.away).length/Math.max(1,direct.length))*.12)*100),reason:'Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · gegnerische Auswärtsform '+af.awayPoints.toFixed(2)+' · Tabellenplätze '+hr.rank+'/'+ar.rank+' · H2H '+direct.length+' Spiele'});
+ // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
+ // are shrunk toward neutral scoring rates to guard against small samples.
+ const shrunk=(venue,overall,venueCount,recent)=>{
+   const base=Number.isFinite(overall)?overall:1.3;
+   const local=venueCount>=3&&Number.isFinite(venue)?venue:base;
+   const measured=.58*local+.28*base+.14*(Number.isFinite(recent)?recent:base);
+   const reliability=Math.min(1,(hf.played+af.played)/28);
+   return measured*reliability+1.3*(1-reliability);
+ };
+ const hAttack=shrunk(hf.homeScored,hf.scored,hf.homePlayed,hf.last5Scored);
+ const aDefence=shrunk(af.awayConceded,af.conceded,af.awayPlayed,af.last5Conceded);
+ const aAttack=shrunk(af.awayScored,af.scored,af.awayPlayed,af.last5Scored);
+ const hDefence=shrunk(hf.homeConceded,hf.conceded,hf.homePlayed,hf.last5Conceded);
+ const bound=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+ const lambdaHome=bound((hAttack*.52+aDefence*.48)*1.06,.25,3.6);
+ const lambdaAway=bound((aAttack*.52+hDefence*.48)*.95,.25,3.6);
+ const poisson=(n,lambda)=>{let p=Math.exp(-lambda);for(let k=1;k<=n;k++)p*=lambda/k;return p};
+ let probHome=0,probDraw=0,probAway=0,weight=0;
+ for(let x=0;x<=9;x++)for(let y=0;y<=9;y++){
+  const p=poisson(x,lambdaHome)*poisson(y,lambdaAway);
+  weight+=p;if(x>y)probHome+=p;else if(x===y)probDraw+=p;else probAway+=p;
  }
- if(awayUnderdog&&af.awayPlayed>=3&&af.awayPoints>=1.65&&hf.homePlayed>=3&&hf.homePoints<=1.3&&af.last5Points>=7){
-  const strength=af.awayPoints-hf.homePoints;
-  picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(Math.min(.85,.40+strength*.15+(direct.filter(x=>Number(x.teams.away.id)===Number(a.id)&&x.goals.away>x.goals.home).length/Math.max(1,direct.length))*.12)*100),reason:'Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · gegnerische Heimform '+hf.homePoints.toFixed(2)+' · Tabellenplätze '+hr.rank+'/'+ar.rank+' · H2H '+direct.length+' Spiele'});
+ if(!(weight>.98))return {status:'insufficientData',picks:[]};
+ probHome/=weight;probDraw/=weight;probAway/=weight;
+ const winProbs={home:probHome,draw:probDraw,away:probAway};
+ const h2hDraws=direct.filter(x=>x.goals.home===x.goals.away).length;
+ const drawRate=(hf.drawRate+af.drawRate)/2;
+ const formDifference=Math.abs(homeRate-awayRate);
+ const rankDifference=Math.abs(Number(hr.rank)-Number(ar.rank));
+ const picks=[];
+ // Draw: coherent goal expectations, balanced form and nontrivial model probability.
+ if(probDraw>=.245&&drawRate>=.22&&formDifference<=.24&&Math.abs(lambdaHome-lambdaAway)<.65){
+  const raw=Math.min(82,45+(probDraw-.245)*200+(drawRate-.22)*25+(rankDifference<=5?3:0));
+  picks.push({type:'Unentschieden',team:'X',score:Math.round(raw),modelProbability:Math.round(probDraw*1000)/10,marketSide:'draw',
+   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · Tabellenplätze '+hr.rank+'/'+ar.rank+' · H2H '+h2hDraws+'/'+direct.length});
+ }
+ const homeUnderdog=Number(hr.rank)>=Number(ar.rank)+3;
+ const awayUnderdog=Number(ar.rank)>=Number(hr.rank)+3;
+ // An outsider is a standings outsider (or objectively an outsider in connected market odds).
+ // Home/away momentum must support an upset; no purely high-price bets.
+ if((homeUnderdog||(market?.home!=null&&market.home<.38&&market.away>.43))&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1.35&&hf.last5Points>=6&&probHome>=.21){
+  const momentum=hf.homePoints-af.awayPoints;
+  if(momentum>=.1){
+   const rating=Math.min(84,42+(probHome-.21)*110+Math.min(8,momentum*8));
+   picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(rating),marketSide:'home',modelProbability:Math.round(probHome*1000)/10,
+    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · Tabelle '+hr.rank+'/'+ar.rank});
+  }
+ }
+ if((awayUnderdog||(market?.away!=null&&market.away<.38&&market.home>.43))&&af.awayPlayed>=3&&hf.homePlayed>=3&&af.awayPoints>=1.35&&af.last5Points>=6&&probAway>=.19){
+  const momentum=af.awayPoints-hf.homePoints;
+  if(momentum>=.1){
+   const rating=Math.min(84,40+(probAway-.19)*115+Math.min(8,momentum*8));
+   picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(rating),marketSide:'away',modelProbability:Math.round(probAway*1000)/10,
+    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · Tabelle '+hr.rank+'/'+ar.rank});
+  }
  }
  return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
-  const side=p.team==='X'?'draw':p.team.startsWith('1 ·')?'home':'away';
+  const side=p.marketSide|| (p.team==='X'?'draw':p.team.startsWith('1 ·')?'home':'away');
   const marketProbability=market?.[side]??null;
   // Odds are a separate plausibility check, never represented as a calibrated model probability.
-  const score=Math.max(0,Math.min(90,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
+  const score=Math.max(0,Math.min(88,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
+  // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
   // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
-  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},h2h:{played:direct.length,draws}};
+  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score).slice(0,1)};
 }
 export default async function handler(req,res){
