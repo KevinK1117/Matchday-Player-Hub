@@ -67,6 +67,17 @@ async function enrichCandidates(candidates,key,date,odds){
   const homeMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.home)).length;
   const awayMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.away)).length;
   let score=pick.score,flags=[];
+  const internal=pick.modelProbability==null?null:Number(pick.modelProbability)/100;
+  if(predictionProbability!=null&&internal!=null){
+   const disagreement=Math.abs(predictionProbability-internal);
+   if(disagreement>.20)return null;
+   if(disagreement>.12){score-=8;flags.push('Abweichende Prognosemodelle – Unsicherheit erhöht');}
+  }
+  if(pick.marketProbability!=null&&internal!=null){
+   const marketDelta=Math.abs(Number(pick.marketProbability)/100-internal);
+   if(marketDelta>.22)return null;
+   if(marketDelta>.13){score-=6;flags.push('Markt und Tormodell weichen deutlich voneinander ab');}
+  }
   if(predictionProbability!=null){
    if(predictionProbability<.13)return null;
    if(predictionProbability<.20)score-=10;
@@ -78,7 +89,8 @@ async function enrichCandidates(candidates,key,date,odds){
    if(side==='home'&&homeMissing>=3||side==='away'&&awayMissing>=3)score-=6;
    flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
   }else flags.push('Ausfalldaten nicht verfügbar');
-  return {...pick,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
+  const quality=(predictionProbability!=null&&pick.marketProbability!=null)?'Breite Datenbasis':predictionProbability!=null||pick.marketProbability!=null?'Ergänzende Kontrolle':'Nur Mannschaftsform';
+  return {...pick,dataQuality:quality,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
     predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
     evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
  }));
@@ -109,7 +121,7 @@ async function evaluate(g,key,date,odds){
  const hf=form(home.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),h.id,date),af=form(away.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
  const direct=(h2h.status==='fulfilled'?h2h.value:[]).filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- if(hf.played<5||af.played<5||!hr||!ar)return {status:'insufficientData',picks:[]};
+ if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||!hr||!ar)return {status:'insufficientData',picks:[]};
  const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
  const market=odds?.byFixture?.get(Number(g.fixture.id))||null;
  // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
