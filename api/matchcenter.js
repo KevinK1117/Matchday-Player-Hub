@@ -30,7 +30,7 @@ export default async function handler(req,res){
  if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isScorerCompetition(g.league));
  if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
- if(!competitions.some(c=>isScorerCompetition({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur europäische 1./2. Ligen und Saudi Pro League sind freigeschaltet'});
+ if(!competitions.some(c=>isScorerCompetition({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur Wettbewerbe aus der Matchday-Auswahlliste sind freigeschaltet'});
  if(action==='table')data=await api('/standings?league='+q.league+'&season='+q.season,key);
  }
  if(action==='player'){
