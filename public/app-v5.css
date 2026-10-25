@@ -56,3 +56,23 @@
 /* Evidence from additional data endpoints */
 .scorer-evidence{margin-top:5px;padding:6px 9px;background:#f0f6ff;border-left:3px solid #6290db;border-radius:4px;color:#415a79;font-size:11px;line-height:1.5}
 .bet-analysis details p{line-height:1.6;margin:8px 0;overflow-wrap:anywhere}
+
+/* Historical walk-forward analysis: compact and legible on phones. */
+.backtest-panel{margin-top:18px}
+.backtest-wrap h2{margin:6px 0 6px;font-size:22px;letter-spacing:-.5px}
+.backtest-wrap>p.muted{margin:0 0 14px;line-height:1.6}
+.backtest-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;align-items:end;margin:16px 0}
+.backtest-controls label{font-size:12px;font-weight:800;color:#586a80;align-self:end}
+.backtest-controls select{width:100%;min-width:0;padding:11px 12px;background:white;border:1px solid #dbe5ee;border-radius:11px;color:#1c344a;font-size:13px}
+.backtest-controls button{grid-column:1/-1;min-height:44px;border-radius:11px}
+.backtest-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.backtest-stat{padding:14px 12px;border:1px solid #e3ebf4;border-radius:13px;background:#f9fbfe;display:flex;flex-direction:column;gap:4px}
+.backtest-stat span{font-size:12px;font-weight:750;color:#526580}
+.backtest-stat strong{font-size:25px;color:#1f3f63;letter-spacing:-.6px;line-height:1.25}
+.backtest-stat small{font-size:11px;color:#66788d;line-height:1.45}
+.backtest-warning{padding:12px;background:#fff4e8;border:1px solid #f1d9b8;border-radius:11px;color:#87602e;line-height:1.55}
+.backtest-details{border:1px solid #e3ebf4;border-radius:12px;padding:12px;margin:16px 0}
+.backtest-details summary{font-weight:800;cursor:pointer;color:#32639a}
+.backtest-details table{font-size:12px;min-width:590px}
+.backtest-note{margin:8px 0;color:#738399;font-size:12px;line-height:1.5}
+@media(max-width:480px){.backtest-metrics{gap:8px}.backtest-stat{padding:12px 10px}.backtest-stat strong{font-size:22px}}
