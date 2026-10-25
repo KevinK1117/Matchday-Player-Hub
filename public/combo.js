@@ -11,8 +11,9 @@ function eligibleScorer(p,confirmedOnly=false){
  if(p.externalExpectedMinutes!=null&&Number(p.externalExpectedMinutes)<50)return false;
  const goals=Number(p.goals),shots=Number(p.shotsPerGame);
  if(!Number.isFinite(goals)||goals<2||!Number.isFinite(shots))return false;
- if(nhl)return Number(p.GP)>=8&&shots>=1.3;
- return Number(p.appearances)>=7&&Number(p.minutes)>=450&&Number(p.minutesPerGame)>=55&&shots>=.75;
+ // Strong enough season sample and regular minutes are mandatory.
+ if(nhl)return Number(p.GP)>=10&&shots>=1.5&&goals>=3;
+ return Number(p.appearances)>=10&&Number(p.minutes)>=600&&Number(p.minutesPerGame)>=60&&shots>=1&&goals>=3;
 }
 export function buildCombo(games,quotes,count,now=Date.now(),players=[],confirmedOnly=false){
  if(!Number.isInteger(count)||count<6||count>10)throw Error('6–10 Torschützen wählen');
@@ -25,6 +26,9 @@ export function buildCombo(games,quotes,count,now=Date.now(),players=[],confirme
  const matches=players.filter(p=>String(p.fixtureId)===String(q.fixtureId)&&(q.playerId!=null?String(p.id)===String(q.playerId):normalize(p.name)===normalize(q.playerName||q.selection)));
  if(matches.length!==1)continue;const p=matches[0],nhl=p.sport==='nhl';
  if(!eligibleScorer(p,confirmedOnly))continue;
+ // Football player-goalscorer bets require an actual published XI. Before that,
+ // show statistical previews only, never claim a confirmed bet combination.
+ if(p.sport==='football'&&p.participation!=='Startelf bestätigt')continue;
  const shotRate=Number(p.shotsPerGame);
  const score=Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,shotRate)*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,shotRate)*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
  const name=String(q.bookmaker),map=groups.get(name)||new Map(),id=String(q.fixtureId)+':'+p.id,old=map.get(id);
@@ -33,7 +37,7 @@ export function buildCombo(games,quotes,count,now=Date.now(),players=[],confirme
  }
  let best=[],bookmaker=null;
  for(const [name,map] of groups){const counts=new Map(),seen=new Set(),list=[];for(const p of [...map.values()].sort((a,b)=>b.score-a.score)){const id=String(p.fixtureId),pid=String(p.player.id);if((counts.get(id)||0)>=1||seen.has(pid))continue;counts.set(id,(counts.get(id)||0)+1);seen.add(pid);list.push(p)}if(list.length>best.length||list.length===best.length&&list.slice(0,count).reduce((s,p)=>s+p.score,0)>best.slice(0,count).reduce((s,p)=>s+p.score,0)){best=list;bookmaker=name}}
- if(best.length<count)return {picks:[],available:best.length,bookmaker,notice:'Nur '+best.length+' geeignete Torschützen mit aktuellen Quoten bei einem Buchmacher (maximal ein Tipp pro Spiel). Keine '+count+'er-Kombi verfügbar. Fehlende Plätze werden nicht aufgefüllt.'};
+ if(best.length<count)return {picks:[],available:best.length,bookmaker,notice:'Nur '+best.length+' Spieler mit geprüften Quoten und (bei Fußball) bestätigter Startelf bei einem Buchmacher verfügbar (maximal ein Tipp pro Spiel). Keine '+count+'er-Kombi verfügbar. Fehlende Plätze werden nicht aufgefüllt.'};
  const picks=best.slice(0,count),counts=new Map();for(const p of picks)counts.set(String(p.fixtureId),(counts.get(String(p.fixtureId))||0)+1);const correlated=[...counts.values()].some(n=>n>1);
  return {picks,bookmaker,available:best.length,correlated,total:correlated?null:picks.reduce((s,p)=>s*p.decimal,1),indicativeProduct:picks.reduce((s,p)=>s*p.decimal,1),notice:'Statistik-Ranking, keine kalibrierte Trefferwahrscheinlichkeit. Für eine kombinierbare Auswahl wird je Begegnung nur ein Spieler berücksichtigt.'+(correlated?' Mehrere Spieler aus demselben Spiel: Märkte sind abhängig. Der Buchmacher muss Kombinierbarkeit und tatsächliche Kombiquote bestätigen.':'')};
 }
