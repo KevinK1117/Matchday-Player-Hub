@@ -18,36 +18,12 @@ async function api(path,key){
 }
 
 
-async function externalOdds(date){
- const endpoint=process.env.MATCH_ODDS_FEED_URL;
- if(!endpoint)return {available:false,byFixture:new Map(),source:null};
- try{
-  const u=new URL(endpoint);if(u.protocol!=='https:')throw Error('HTTPS erforderlich');
-  u.searchParams.set('date',date);
-  const headers=process.env.MATCH_ODDS_FEED_TOKEN?{Authorization:'Bearer '+process.env.MATCH_ODDS_FEED_TOKEN}:{};
-  const r=await fetch(u,{headers,signal:AbortSignal.timeout(7000)});
-  if(!r.ok)throw Error('Odds-Feed HTTP '+r.status);
-  const body=await r.json();
-  const entries=Array.isArray(body)?body:Array.isArray(body.matches)?body.matches:[];
-  const byFixture=new Map();
-  for(const row of entries){
-   const fixtureId=Number(row.fixtureId);
-   const h=Number(row.homeOdds),d=Number(row.drawOdds),a=Number(row.awayOdds);
-   if(!Number.isInteger(fixtureId)||![h,d,a].every(v=>Number.isFinite(v)&&v>1.01&&v<1000))continue;
-   const inverse=[1/h,1/d,1/a],sum=inverse.reduce((x,y)=>x+y,0);
-   byFixture.set(fixtureId,{home:inverse[0]/sum,draw:inverse[1]/sum,away:inverse[2]/sum,bookmaker:typeof row.bookmaker==='string'?row.bookmaker.slice(0,60):'Externer Anbieter'});
-  }
-  return {available:byFixture.size>0,byFixture,source:'Lizenzierter externer Quotenfeed'};
- }catch(e){return {available:false,byFixture:new Map(),source:null,error:String(e.message).slice(0,80)}}
-}
-
-
 function providerPercent(value){
  if(value==null)return null;
  const n=Number(String(value).replace('%','').trim());
  return Number.isFinite(n)&&n>=0&&n<=100?n/100:null;
 }
-async function enrichCandidates(candidates,key,date,odds){
+async function enrichCandidates(candidates,key,date){
  // Fetch predictions only for matches that passed form and table screening.
  // Cap extra calls to protect the user's API-Sports quota.
  let injuries=[],injuriesAvailable=false;
@@ -75,11 +51,6 @@ async function enrichCandidates(candidates,key,date,odds){
    if(disagreement>.20)return null;
    if(disagreement>.12){score-=8;flags.push('Abweichende Prognosemodelle – Unsicherheit erhöht');}
   }
-  if(pick.marketProbability!=null&&internal!=null){
-   const marketDelta=Math.abs(Number(pick.marketProbability)/100-internal);
-   if(marketDelta>.22)return null;
-   if(marketDelta>.13){score-=6;flags.push('Markt und Tormodell weichen deutlich voneinander ab');}
-  }
   if(predictionProbability!=null){
    if(predictionProbability<.13)return null;
    if(predictionProbability<.20)score-=10;
@@ -92,13 +63,12 @@ async function enrichCandidates(candidates,key,date,odds){
    flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
   }else flags.push('Ausfalldaten nicht verfügbar');
   // Keep model-only candidates visible as provisional analyses, never as independently confirmed picks.
-  if(predictionProbability==null&&pick.marketProbability==null){flags.push('Nur internes Form-/Tormodell · ohne unabhängige Bestätigung');return {...pick,score:Math.max(0,Math.min(90,score)),dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,evidenceSources:['API-Sports: Tabelle/Form/H2H',...(injuriesAvailable?['API-Sports: Ausfälle']:[])]};}
+  if(predictionProbability==null){flags.push('Nur internes Form-/Tormodell · ohne zusätzliche Prognosebestätigung');return {...pick,score:Math.max(0,Math.min(90,score)),dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,evidenceSources:['API-Sports: Tabelle/Form/H2H',...(injuriesAvailable?['API-Sports: Ausfälle']:[])]};}
   if(predictionProbability!=null&&predictionProbability<.23)return null;
-  if(pick.marketProbability!=null&&Number(pick.marketProbability)<18)return null;
-  const quality=(predictionProbability!=null&&pick.marketProbability!=null)?'Zwei externe Prüfungen':'Eine zusätzliche Prüfung';
+  const quality='Zusätzliche Prognoseprüfung';
   return {...pick,dataQuality:quality,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
     predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
-    evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
+    evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[])]};
  }));
  return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),screened:limited.length,rejected:enriched.filter(x=>x==null).length,injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
 }
@@ -115,7 +85,7 @@ function ranks(standings,id){
  const row=groups.flat().find(x=>Number(x.team?.id)===Number(id));
  return row?{rank:row.rank,points:row.points,played:row.all?.played,goalDiff:row.goalsDiff}:null;
 }
-async function evaluate(g,key,date,odds,independent){
+async function evaluate(g,key,date,independent){
  const h=g.teams.home,a=g.teams.away,isCup=g.league?.type==='Cup';
  const historyPath=id=>'/fixtures?team='+id+(isCup?'&last=20':'&league='+g.league.id+'&season='+g.league.season+'&last=20');
  const [home,away,h2h,standings]=await Promise.allSettled([
@@ -131,7 +101,6 @@ async function evaluate(g,key,date,odds,independent){
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
  if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||(!isCup&&(!hr||!ar)))return {status:'insufficientData',picks:[]};
  const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
- const market=odds?.byFixture?.get(Number(g.fixture.id))||null;
  // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
  // are shrunk toward neutral scoring rates to guard against small samples.
  const shrunk=(venue,overall,venueCount,recent)=>{
@@ -180,7 +149,7 @@ async function evaluate(g,key,date,odds,independent){
  }
  const homeUnderdog=isCup?probHome+.15<probAway&&probHome<.4:Number(hr.rank)>=Number(ar.rank)+3;
  const awayUnderdog=isCup?probAway+.15<probHome&&probAway<.4:Number(ar.rank)>=Number(hr.rank)+3;
- // An outsider is a standings outsider (or objectively an outsider in connected market odds).
+ // Outsiders are identified from standings or model strength differences.
  // Home/away momentum must support an upset; no purely high-price bets.
  if((homeUnderdog||(market?.home!=null&&market.home<.38&&market.away>.43))&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1.35&&hf.last5Points>=6&&probHome>=.21){
   const momentum=hf.homePoints-af.awayPoints;
@@ -199,13 +168,9 @@ async function evaluate(g,key,date,odds,independent){
   }
  }
  return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
-  const side=p.marketSide|| (p.team==='X'?'draw':p.team.startsWith('1 ·')?'home':'away');
-  const marketProbability=market?.[side]??null;
-  // Odds are a separate plausibility check, never represented as a calibrated model probability.
-  const score=Math.max(0,Math.min(88,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
   // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
   // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
-  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
+  return {...p,score:Math.max(0,Math.min(88,p.score)),independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score).slice(0,1)};
 }
 export default async function handler(req,res){
@@ -216,7 +181,7 @@ export default async function handler(req,res){
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
-  const [odds,independent]=await Promise.all([externalOdds(date),getFlashscoreEvidence(date,'football')]);
+  const independent=await getFlashscoreEvidence(date,'football');
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isDrawCompetition(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
   // Include all fixtures from the strict approved competition list, not only top-ranked leagues.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
@@ -248,7 +213,7 @@ export default async function handler(req,res){
    while(next<selected.length){
     if(Date.now()-started>budgetMs-12500)break;
     const index=next++;
-    try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,odds,independent)}}
+    try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,independent)}}
     catch(reason){results[index]={status:'rejected',reason}}
    }
   }));
@@ -266,7 +231,7 @@ export default async function handler(req,res){
   const settledResults=results.filter(Boolean);
   const diagnostics={providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
-  const evidence=await enrichCandidates(preliminary,key,date,odds);
+  const evidence=await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
   // high-scoring provisional entries crowd out verified signals from the list.
   const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
@@ -286,8 +251,8 @@ export default async function handler(req,res){
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(considered<fixtures.length)notice+=' Datenanbieter-Zeitbudget: '+considered+' von '+fixtures.length+' Spielen analysiert; übrige Spiele noch nicht geprüft.';
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
-  if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht für eine verifizierte Wettkombi geeignet.';
+  if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht zusätzlich bestätigt.';
   if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
-  return res.status(200).json({configured:true,date,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
