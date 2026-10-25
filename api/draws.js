@@ -52,7 +52,8 @@ async function enrichCandidates(candidates,key,date,odds){
  // Cap extra calls to protect the user's API-Sports quota.
  let injuries=[],injuriesAvailable=false;
  try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
- const limited=candidates.slice(0,20);
+ // Evaluate independent corroboration for signals from every represented league.
+ const limited=candidates.slice(0,Math.min(100,Math.max(40,candidates.length)));
  const enriched=await Promise.all(limited.map(async pick=>{
   let model=null,modelSource=null,modelError=null;
   try{
@@ -214,9 +215,7 @@ export default async function handler(req,res){
  try{
   const [odds,independent]=await Promise.all([externalOdds(date),getFlashscoreEvidence(date,'football')]);
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isDrawCompetition(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  // Two guaranteed evaluation places per available high-priority competition,
-  // before considering other leagues; remaining capacity is distributed fairly.
-  // The Saudi first division is now explicitly eligible for both markets.
+  // Include all fixtures from the strict approved competition list, not only top-ranked leagues.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
   const groups=new Map();
   for(const fixture of fixtures){
@@ -228,9 +227,9 @@ export default async function handler(req,res){
    const ai=preferred.indexOf(a),bi=preferred.indexOf(b);
    return (ai<0?999:ai)-(bi<0?999:bi)||a-b;
   });
-  const maxFixtures=Math.min(36,Math.max(24,count*3+8));
+  const maxFixtures=fixtures.length;
   const selected=[],priorityLeagues=preferred.filter(id=>groups.has(id));
-  // Fill two rounds from priority leagues before spreading to other leagues.
+  // Evaluate every competition in a round-robin schedule. No league cap or league omitted.
   for(let round=0;round<2&&selected.length<maxFixtures;round++){
    for(const id of priorityLeagues){
     const fixture=groups.get(id).shift();
