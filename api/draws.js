@@ -263,7 +263,7 @@ export default async function handler(req,res){
     status:checked===0?'not_checked':checked<total||dataErrors?'partial':'covered'};
   });
   const settledResults=results.filter(Boolean);
-  const diagnostics={providerErrors:settledResults.filter(r=>r.status='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
+  const diagnostics={providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date,odds);
   const candidates=[],seenFixtures=new Set();
