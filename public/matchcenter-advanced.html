@@ -210,7 +210,58 @@ async function nhlPlayer(id){const token=++modalToken;openModal('NHL-Torschütze
 
 function nhlTable(rows){return rows.length?`<div class="tablewrap"><table><tr><th>#</th><th>Team</th><th>Sp</th><th>Tore</th><th>Pkt</th></tr>${[...rows].sort((a,b)=>b.points-a.points).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.teamName?.default||r.teamAbbrev?.default)}</td><td>${fmt(r.gamesPlayed)}</td><td>${fmt(r.goalFor)}:${fmt(r.goalAgainst)}</td><td><b>${fmt(r.points)}</b></td></tr>`).join('')}</table></div>`:'<div class="empty">Tabelle nicht verfügbar.</div>'}
 async function loadScorers(g){const el=$('detailbody');el.innerHTML='<div class="loading">Topscorer laden …</div>';try{const rows=demoMode?demoPlayers:(await get({action:'scorers',league:g.league.id,season:g.league.season})).data;if(el!==$('detailbody')||tab!=='scorers')return;el.innerHTML=rows?.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${g.league.season}"><b>${i+1}</b>${portrait(p.player.id,sport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,g.league.season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.goals?.total)} Tore</small></span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar.</div>'}catch(e){if(el===$('detailbody')&&tab==='scorers')el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
-const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Tabelle · letzte 5 Spiele · Heim-/Auswärtsform</p><label for="drawCount">Kombi-Größe</label><select id="drawCount">${[6,7,8,9,10].map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Tabellen-Außenseiter · Index ist keine Gewinnwahrscheinlichkeit.</p></div>`;$('combo-card').after(drawSection);
+const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Tabelle · letzte 5 Spiele · Heim-/Auswärtsform</p><label for="drawCount">Kombi-Größe</label><select id="drawCount">${[6,7,8,9,10].map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Tabellen-Außenseiter · Index ist keine Gewinnwahrscheinlichkeit.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
+backtestSection.innerHTML='<div class="backtest-wrap"><div class="eyebrow">FUSSBALL · QUALITÄTSCHECK</div><h2>Vergangene Tipps überprüfen</h2><p class="muted">Historische Spieltage werden ohne Daten aus der Zukunft bewertet. Ein Modell-Rücktest ist kein Nachweis früherer tatsächlich angezeigter Tipps.</p><div class="backtest-controls"><label for="backtestLeague">Wettbewerb</label><select id="backtestLeague" aria-label="Liga für Rücktest"></select><label for="backtestDays">Zeitraum</label><select id="backtestDays"><option value="14">Letzte 14 Tage</option><option value="30" selected>Letzte 30 Tage</option><option value="45">Letzte 45 Tage</option></select><button type="button" id="backtestRun" class="primary">Rücktest starten</button></div><div id="backtestResult" aria-live="polite"><p class="notice">Wähle eine Liga und starte den Vergleich mit vergangenen Ergebnissen.</p></div></div>';
+// Both panels must be inserted before binding their controls. A detached panel
+// caused a startup TypeError and left the Home page completely blank.
+const comboPanel=$('combo-card');
+if(comboPanel){
+ comboPanel.after(drawSection);
+ drawSection.after(backtestSection);
+}else{
+ const fallback=document.querySelector('main')||document.body;
+ fallback.append(drawSection,backtestSection);
+}
+function syncBacktestLeagues(){
+ const select=$('backtestLeague');if(!select)return;
+ const old=select.value||'78',options=footballLeagueOptions().filter(x=>x[0]>0);
+ select.innerHTML=options.map(([id,flag,name])=>'<option value="'+esc(id)+'">'+esc(flag+' '+name)+'</option>').join('');
+ select.value=options.some(x=>String(x[0])===old)?old:'78';
+}
+function backtestPercent(n){return n==null||!Number.isFinite(Number(n))?'–':(100*Number(n)).toFixed(1)+' %'}
+function backtestLabel(p){return p==='home'?'Heimsieg':p==='away'?'Auswärtssieg':p==='draw'?'Remis':'–'}
+function renderBacktest(d){
+ const out=$('backtestResult');
+ if(!d.configured){out.innerHTML='<p class="notice">'+esc(d.notice||'Keine historischen Daten verfügbar.')+'</p>';return}
+ const n=d.coverage?.analyzed||0,draw=d.draw||{},outsider=d.outsider||{},result=d.result||{};
+ const warning=d.coverage?.failedRequests?'<p class="backtest-warning">Achtung: '+esc(d.coverage.failedRequests)+' Anbieterabfragen sind fehlgeschlagen. Die Stichprobe ist unvollständig.</p>':'';
+ const cards=[
+  ['Analysierte Spiele',String(n),'Historische Ligaspiele mit ausreichender Vorab-Form'],
+  ['Remis-Tipps',String(draw.hits||0)+' / '+String(draw.tips||0),backtestPercent(draw.hitRate)+' getroffen · Basisrate '+backtestPercent(draw.baselineRate)],
+  ['Außenseiter-Tipps',String(outsider.hits||0)+' / '+String(outsider.tips||0),backtestPercent(outsider.hitRate)+' getroffen · Basisrate '+backtestPercent(outsider.baselineRate)],
+  ['Spielausgänge',backtestPercent(result.matchWinnerAccuracy),'Modellgenauigkeit 1X2 · nicht dieselbe Auswahl wie die Kombi']
+ ];
+ out.innerHTML='<p class="result-status">'+esc(d.league?.name||'Liga')+' · '+esc(d.from||'')+' bis '+esc(d.to||'')+'</p>'+warning+
+ '<div class="backtest-metrics">'+cards.map(([name,num,description])=>'<div class="backtest-stat"><span>'+esc(name)+'</span><strong>'+esc(num)+'</strong><small>'+esc(description)+'</small></div>').join('')+'</div>'+
+ (n<20?'<p class="backtest-warning">Kleine Stichprobe: Ergebnisse sind besonders unsicher und kein Beleg für eine bessere Trefferquote.</p>':'')+
+ '<details class="backtest-details"><summary>Einzelspiele ansehen</summary><div class="tablewrap"><table><thead><tr><th>Datum</th><th>Begegnung</th><th>Modell</th><th>Ergebnis</th><th>Signal</th></tr></thead><tbody>'+
+ (d.records||[]).slice().reverse().map(r=>'<tr><td>'+esc(r.date)+'</td><td>'+esc(r.home)+' – '+esc(r.away)+'</td><td>'+esc(backtestLabel(r.selected))+'</td><td>'+esc(backtestLabel(r.actual))+'</td><td>'+esc([r.drawTip?'Remis':'',r.outsiderTip?'Außenseiter '+backtestLabel(r.outsiderTip):''].filter(Boolean).join(', ')||'–')+'</td></tr>').join('')+
+ '</tbody></table></div></details><p class="notice">'+esc(d.method||'')+'</p>'+
+ (d.limitations||[]).map(note=>'<p class="backtest-note">• '+esc(note)+'</p>').join('');
+}
+syncBacktestLeagues();
+$('backtestRun').onclick=async()=>{
+ const button=$('backtestRun'),result=$('backtestResult');
+ button.disabled=true;result.innerHTML='<p class="loading">Vergangene Spieltage werden ausgewertet …</p>';
+ try{
+  const qs=new URLSearchParams({league:$('backtestLeague').value,days:$('backtestDays').value});
+  const response=await fetch('/api/backtest?'+qs,{signal:AbortSignal.timeout(45000)});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||data.error||'Historische Daten nicht verfügbar');
+  renderBacktest(data);
+ }catch(e){result.innerHTML='<p class="backtest-warning">'+esc(e.name==='TimeoutError'?'Der Rücktest hat zu lange gedauert. Bitte erneut starten.':e.message)+'</p>'}
+ finally{button.disabled=false}
+};
 
 function drawPickCard(p,i){
  const draw=p.type==='Unentschieden',code=draw?'X':String(p.team||'').match(/^[12]/)?.[0]||'S',pick=draw?'Remis nach 90 Minuten':String(p.team||'').replace(/^[12]\s*[·.-]\s*/,''),when=p.kickoff&&Number.isFinite(Date.parse(p.kickoff))?new Date(p.kickoff).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}):null;
@@ -223,7 +274,7 @@ $('drawGenerate').onclick=async()=>{const token=++drawToken,b=$('drawGenerate'),
 
 function leagueSeason(id){const c=leagueCatalog.find(c=>c.id===Number(id));return c?.seasons?.find(s=>s.current)?.year??games.find(g=>g.league.id===Number(id))?.league.season??(Number($('date').value.slice(0,4))-(Number($('date').value.slice(5,7))<7?1:0))}
 function syncLeagueSelect(){const el=$('leaguePicker');if(el)el.value=String(league)}
-async function loadCatalog(){try{const r=await fetch('/api/matchcenter?action=leagues'),d=await r.json();if(!r.ok||d.error||!d.configured)return;leagueCatalog=(d.data||[]).sort((a,b)=>(a.country+a.name).localeCompare(b.country+b.name));catalogLoaded=true;if(sport==='football'){drawLeagues();const el=$('leaguePicker');el.innerHTML=footballLeagueOptions().map(([id,flag,name])=>`<option value="${id}">${esc(flag+' '+name)}</option>`).join('');syncLeagueSelect()}}catch{}}
+async function loadCatalog(){try{const r=await fetch('/api/matchcenter?action=leagues'),d=await r.json();if(!r.ok||d.error||!d.configured)return;leagueCatalog=(d.data||[]).sort((a,b)=>(a.country+a.name).localeCompare(b.country+b.name));catalogLoaded=true;if(sport==='football'){drawLeagues();const el=$('leaguePicker');el.innerHTML=footballLeagueOptions().map(([id,flag,name])=>`<option value="${id}">${esc(flag+' '+name)}</option>`).join('');syncLeagueSelect();syncBacktestLeagues()}}catch{}}
 async function renderScorers(){const token=++scorerToken,id=league||78,season=leagueSeason(id),currentSport=sport;$('content').innerHTML='<div class="loading">Topscorer werden geladen …</div>';try{const data=demoMode?{data:demoPlayers}:(await get({action:'scorers',league:id,season}));if(token!==scorerToken||view!=='scorers'||sport!==currentSport)return;const rows=data.data||[];$('content').innerHTML=`<div class="league-head">${currentSport==='nhl'?'NHL · aktueller Anbieterstand':esc(footballLeagueOptions().find(x=>x[0]===id)?.[2]||'Liga')+' · Saison '+season}</div>`+(rows.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${season}"><strong>${i+1}</strong>${portrait(p.player.id,currentSport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.games?.appearences)} Einsätze</small></span><span class="rating">${fmt(p.statistics?.[0]?.goals?.total)} Tore</span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar. Andere Liga wählen oder Anbieterabdeckung prüfen.</div>')}catch(e){if(token===scorerToken&&view==='scorers')$('content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
 const leagueControl=document.createElement('div');leagueControl.className='league-control';leagueControl.innerHTML='<label for="leaguePicker">Wettbewerb</label><select id="leaguePicker"></select>';$('maincard').before(leagueControl);
 function updatePicker(){const el=$('leaguePicker');el.innerHTML=(sport==='nhl'?[[0,'🏒','NHL']]:footballLeagueOptions()).map(([id,flag,name])=>`<option value="${id}">${esc(flag+' '+name)}</option>`).join('');syncLeagueSelect()}
