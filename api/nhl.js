@@ -1,7 +1,7 @@
 const ROOT='https://api-web.nhle.com/v1';
 const cache=new Map();
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export const fetchJson=async(path)=>{const now=Date.now();const stored=cache.get(path);if(stored&&stored.expires>now)return stored.data;let r=await fetch(ROOT+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(r.status===429){if(stored)return stored.data;const err=new Error('NHL API 429: temporäre Anfragelimitierung');err.rateLimited=true;throw err}if(!r.ok){if(stored)return stored.data;throw Error(`NHL API ${r.status}`)}const data=await r.json();cache.set(path,{data,expires:now+(path.startsWith('/score/')?300000:1800000)});if(cache.size>300)cache.delete(cache.keys().next().value);return data};
+export const fetchJson=async(path)=>{const now=Date.now();const stored=cache.get(path);if(stored&&stored.expires>now)return stored.data;let r=await fetch(ROOT+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});if(r.status===429){if(stored)return stored.data;const err=new Error('NHL API 429: temporäre Anfragelimitierung');err.rateLimited=true;throw err}if(!r.ok){if(stored)return stored.data;throw Error(`NHL API ${r.status}`)}const data=await r.json();cache.set(path,{data,expires:now+(path.startsWith('/gamecenter/')?45000:path.startsWith('/score/')?120000:1800000)});if(cache.size>300)cache.delete(cache.keys().next().value);return data};
 export const value=o=>typeof o==='string'?o:o?.default||o?.en||'';
 const sec=v=>{if(typeof v==='number')return v;const m=/^(\d+):(\d\d)$/.exec(String(v||''));return m?+m[1]*60 + +m[2]:null};
 export async function fetchBerlinSchedule(date){
