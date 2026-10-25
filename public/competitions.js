@@ -12,10 +12,13 @@ export function isTopFlight(league){
  return top.get(country)?.has(name)===true;
 }
 
-/** Scorer coverage adds the Saudi first division only. Draws/underdogs remain Europe-only. */
+/** European first/second tiers plus Saudi Pro League for selected analysis markets. */
 export function isScorerCompetition(league){
  if(isTopFlight(league))return true;
  if(!league||(league.type&&league.type!=='League'))return false;
  const country=normalizeCompetition(league.country),name=normalizeCompetition(league.name);
  return country==='saudiarabia'&&new Set(['proleague','saudiproleague','saudiprofessionalleague','roshnsaudileague']).has(name);
 }
+
+/** Draws and underdog wins now use the same eligible league scope as scorers. */
+export function isDrawCompetition(league){return isScorerCompetition(league)}
