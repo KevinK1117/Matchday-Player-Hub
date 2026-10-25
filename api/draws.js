@@ -214,20 +214,33 @@ export default async function handler(req,res){
  try{
   const [odds,independent]=await Promise.all([externalOdds(date),getFlashscoreEvidence(date,'football')]);
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  // Balance coverage across competitions rather than taking only the earliest 12 kickoffs.
-  fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
-  const maxFixtures=Math.min(24,Math.max(18,count*2+6));
-  const selected=[],included=new Set(),represented=new Set();
-  for(const g of fixtures){
-   if(selected.length===maxFixtures)break;
-   const league=String(g.league.id);
-   if(represented.has(league))continue;
-   represented.add(league);included.add(g.fixture.id);selected.push(g);
+  // Major European leagues first; rotate fairly across other eligible leagues.
+  // Saudi Arabia is excluded from draws and outsider-win picks.
+  const preferred=[78,79,39,40,140,141,135,136,61,62,88,94,203,179,180,113,114];
+  const groups=new Map();
+  for(const fixture of fixtures){
+   const id=Number(fixture.league.id);
+   if(!groups.has(id))groups.set(id,[]);
+   groups.get(id).push(fixture);
   }
-  for(const g of fixtures){
-   if(selected.length===maxFixtures)break;
-   if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
+  const order=[...groups.keys()].sort((a,b)=>{
+   const ai=preferred.indexOf(a),bi=preferred.indexOf(b);
+   return (ai<0?999:ai)-(bi<0?999:bi)||a-b;
+  });
+  const maxFixtures=Math.min(36,Math.max(24,count*3+8));
+  const selected=[];
+  while(selected.length<maxFixtures&&order.some(id=>groups.get(id).length)){
+   for(const id of order){
+    const fixture=groups.get(id).shift();
+    if(fixture)selected.push(fixture);
+    if(selected.length>=maxFixtures)break;
+   }
   }
+  const leagueCoverage=order.map(id=>{
+   const total=fixtures.filter(g=>Number(g.league.id)===id).length;
+   const checked=selected.filter(g=>Number(g.league.id)===id).length;
+   return {leagueId:id,league:fixtures.find(g=>Number(g.league.id)===id)?.league?.name||'Liga',fixtures:total,checked,status:checked===total?'covered':checked?'partial':'not_checked'};
+  });
   const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds,independent))))}
   const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
@@ -242,6 +255,6 @@ export default async function handler(req,res){
   let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(!candidates.length&&preliminary.length)notice+=' Keine unabhängig bestätigten Tipps: zusätzliche Prognose- oder Quotendaten fehlen.';
-  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:results.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:results.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
