@@ -88,18 +88,19 @@ function ranks(standings,id){
 async function evaluate(g,key,date,independent){
  const h=g.teams.home,a=g.teams.away,isCup=g.league?.type==='Cup';
  const historyPath=id=>'/fixtures?team='+id+(isCup?'&last=20':'&league='+g.league.id+'&season='+g.league.season+'&last=20');
- const [home,away,h2h,standings]=await Promise.allSettled([
-  api(historyPath(h.id),key),
-  api(historyPath(a.id),key),
-  api('/fixtures/headtohead?h2h='+h.id+'-'+a.id+'&last=8',key),
-  isCup?Promise.resolve([]):api('/standings?league='+g.league.id+'&season='+g.league.season,key)
- ]);
- if(home.status!=='fulfilled'||away.status!=='fulfilled'||standings.status!=='fulfilled')return {status:'providerError',picks:[]};
+ // Two required team histories; standings and H2H are optional, never a reason
+ // to discard an otherwise analyzable fixture when the provider rate-limits.
+ const [home,away]=await Promise.allSettled([api(historyPath(h.id),key),api(historyPath(a.id),key)]);
+ if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:String(home.reason?.message||away.reason?.message||'unknown').slice(0,100)};
  const allowable=rows=>rows.filter(x=>isDrawCompetition(x.league)&&(isCup||Number(x.league?.id)===Number(g.league.id)));
- const hf=form(allowable(home.value),h.id,date),af=form(allowable(away.value),a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
- const direct=(h2h.status==='fulfilled'?h2h.value:[]).filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
+ const hf=form(allowable(home.value),h.id,date),af=form(allowable(away.value),a.id,date);
+ // Only ask for optional standings when both sides have enough history.
+ if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2)return {status:'insufficientData',picks:[]};
+ const standings=await api('/standings?league='+g.league.id+'&season='+g.league.season,key).catch(()=>[]);
+ const hr=ranks(standings,h.id),ar=ranks(standings,a.id);
+ const direct=[];
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||(!isCup&&(!hr||!ar)))return {status:'insufficientData',picks:[]};
+ if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||false)return {status:'insufficientData',picks:[]};
  const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
  // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
  // are shrunk toward neutral scoring rates to guard against small samples.
@@ -136,7 +137,7 @@ async function evaluate(g,key,date,independent){
  if(!(weight>.98))return {status:'insufficientData',picks:[]};
  probHome/=weight;probDraw/=weight;probAway/=weight;
  const winProbs={home:probHome,draw:probDraw,away:probAway};
- const h2hDraws=direct.filter(x=>x.goals.home===x.goals.away).length;
+ const h2hDraws=0;
  const drawRate=(hf.drawRate+af.drawRate)/2;
  const formDifference=Math.abs(homeRate-awayRate);
  const rankDifference=hr&&ar?Math.abs(Number(hr.rank)-Number(ar.rank)):null;
@@ -207,7 +208,7 @@ export default async function handler(req,res){
   // Strict server budget avoids a 60-second HTTP timeout on busy days.
   // Unchecked fixtures remain visible as 'not_checked', never reported as analyzed.
   const results=new Array(selected.length);
-  const started=Date.now(),budgetMs=42000,maxWorkers=3;
+  const started=Date.now(),budgetMs=42000,maxWorkers=2;
   let next=0;
   await Promise.all(Array.from({length:Math.min(maxWorkers,selected.length)},async()=>{
    while(next<selected.length){
