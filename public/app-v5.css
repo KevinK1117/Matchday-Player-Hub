@@ -76,3 +76,9 @@
 .backtest-details table{font-size:12px;min-width:590px}
 .backtest-note{margin:8px 0;color:#738399;font-size:12px;line-height:1.5}
 @media(max-width:480px){.backtest-metrics{gap:8px}.backtest-stat{padding:12px 10px}.backtest-stat strong{font-size:22px}}
+
+/* Clear official/unconfirmed state above the graphical pitch. */
+.lineup-banner{margin:12px 0 14px;padding:10px 13px;border:1px solid #e8d8a3;background:#fff9e8;color:#785a18;border-radius:10px;font-weight:750;font-size:12px;line-height:1.5}
+.lineup-banner.lineup-confirmed{border-color:#9ad9bd;background:#eaf8f0;color:#17683d}
+.lineup-preview-title .lineup-status{max-width:100%;white-space:normal}
+@media(max-width:480px){.lineup-banner{font-size:11px;padding:10px}}
