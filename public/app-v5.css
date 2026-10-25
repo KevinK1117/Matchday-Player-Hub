@@ -88,3 +88,13 @@
 .coverage-line{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;padding:9px 0;color:#25394b;font-size:12px}
 .coverage-line strong{text-align:right;color:#577189;font-size:12px;font-weight:700}
 @media(max-width:480px){.coverage-line{align-items:flex-start;flex-direction:column;gap:3px}.coverage-line strong{text-align:left}}
+
+/* Distinguish analyzed-but-unconfirmed model candidates from externally checked picks. */
+.draw-results-section{margin:18px 0 22px}
+.draw-results-section>h3{font-size:16px;line-height:1.3;margin:6px 0 9px;color:#142738}
+.draw-provisional-warning{font-size:13px;line-height:1.65;padding:13px 15px;margin:12px 0 16px;border:1px solid #e2d8c3;border-radius:12px;background:#faf8f3;color:#695b41}
+.draw-validation-label{font-size:11px;font-weight:800;letter-spacing:.2px;color:#167c60;padding:0 0 10px}
+.drawpick.is-provisional{border-color:#e1dac9;background:#fffdfa}
+.drawpick.is-provisional .draw-validation-label{color:#80672e}
+.drawpick.is-provisional .bet-number{background:#eeeae2;color:#695e44}
+@media(max-width:480px){.draw-results-section>h3{font-size:15px}.draw-provisional-warning{padding:11px 12px}}
