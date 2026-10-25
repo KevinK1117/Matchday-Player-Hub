@@ -1,4 +1,4 @@
-import {isTopFlight} from '../public/competitions.js';
+import {isDrawCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
 const cache=new Map(),pending=new Map();
@@ -213,10 +213,11 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
   const [odds,independent]=await Promise.all([externalOdds(date),getFlashscoreEvidence(date,'football')]);
-  const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  // Major European leagues first; rotate fairly across other eligible leagues.
-  // Saudi Arabia is excluded from draws and outsider-win picks.
-  const preferred=[78,79,39,40,140,141,135,136,61,62,88,94,203,179,180,113,114];
+  const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isDrawCompetition(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
+  // Two guaranteed evaluation places per available high-priority competition,
+  // before considering other leagues; remaining capacity is distributed fairly.
+  // The Saudi first division is now explicitly eligible for both markets.
+  const preferred=[78,79,135,39,61,140,307,40,136,62,141,88,94,203,179,180,113,114];
   const groups=new Map();
   for(const fixture of fixtures){
    const id=Number(fixture.league.id);
@@ -228,7 +229,15 @@ export default async function handler(req,res){
    return (ai<0?999:ai)-(bi<0?999:bi)||a-b;
   });
   const maxFixtures=Math.min(36,Math.max(24,count*3+8));
-  const selected=[];
+  const selected=[],priorityLeagues=preferred.filter(id=>groups.has(id));
+  // Fill two rounds from priority leagues before spreading to other leagues.
+  for(let round=0;round<2&&selected.length<maxFixtures;round++){
+   for(const id of priorityLeagues){
+    const fixture=groups.get(id).shift();
+    if(fixture)selected.push(fixture);
+    if(selected.length>=maxFixtures)break;
+   }
+  }
   while(selected.length<maxFixtures&&order.some(id=>groups.get(id).length)){
    for(const id of order){
     const fixture=groups.get(id).shift();
@@ -242,6 +251,12 @@ export default async function handler(req,res){
    return {leagueId:id,league:fixtures.find(g=>Number(g.league.id)===id)?.league?.name||'Liga',fixtures:total,checked,status:checked===total?'covered':checked?'partial':'not_checked'};
   });
   const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds,independent))))}
+  for(const entry of leagueCoverage){
+   const statuses=selected.map((g,i)=>Number(g.league.id)===entry.leagueId?results[i]:null).filter(Boolean);
+   entry.evaluated=statuses.filter(r=>r.status==='fulfilled'&&r.value?.status!=='providerError').length;
+   entry.dataErrors=statuses.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length;
+   if(entry.dataErrors)entry.status='partial';
+  }
   const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date,odds);
@@ -254,6 +269,7 @@ export default async function handler(req,res){
   const complete=candidates.length>=count;
   let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
+  if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
   if(!candidates.length&&preliminary.length)notice+=' Keine unabhängig bestätigten Tipps: zusätzliche Prognose- oder Quotendaten fehlen.';
   return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:results.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
