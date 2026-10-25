@@ -113,3 +113,66 @@
 .draw-data-status strong{flex-basis:100%;font-size:12px;color:#586b7d}
 .draw-data-status span{display:inline-block;max-width:100%;padding:5px 9px;border:1px solid #dce5ec;border-radius:8px;background:#f5f8fa;font-size:12px;line-height:1.4;color:#3c5267;overflow-wrap:anywhere}
 @media(max-width:480px){.draw-data-status{gap:6px}.draw-data-status span{font-size:11px}}
+
+/* Global compact layout: smaller tiles, denser cards, same accessible tap targets. */
+.app-header{padding:17px 16px 12px}
+.brand-icon{width:45px;height:45px;border-radius:13px}
+.brand{gap:9px}.brand strong{font-size:23px;letter-spacing:-.7px}.brand small{font-size:11px;margin-top:2px}
+.calendar-card{min-width:0;padding:8px 10px;gap:6px;border-radius:14px}
+.calendar-card>svg{width:21px;height:21px}
+.sportbar{padding:0 14px}.sports{gap:8px;margin-bottom:14px}
+.sport-card{gap:6px;padding:12px 9px;border-radius:15px}
+.sport-symbol{font-size:22px}.sport-card strong{font-size:14px}.sport-card small{font-size:10px;margin-top:2px}
+.sport-card>svg{width:21px;height:21px}
+.wrap{padding:0 14px}.dashboard{gap:8px;margin-bottom:20px}
+.dashboard-stat{min-height:98px;padding:11px 5px;border-radius:15px}
+.dashboard-stat svg{width:21px;height:21px;margin-bottom:4px}
+.dashboard-stat strong{font-size:20px}.dashboard-stat>span{font-size:10px;margin-top:4px}
+.home-heading{margin-bottom:12px}.home-heading h1{font-size:21px;gap:8px}
+.home-heading h1 svg{width:24px;height:24px}.home-heading p{font-size:11px;margin-top:4px}
+.iconbtn{width:40px;height:40px;border-radius:12px}
+.home-player-card{padding:13px;margin-bottom:10px;border-radius:17px}
+.home-player-top{gap:8px}.rank-number{width:30px;height:30px;font-size:17px}
+.home-profile{gap:8px}.home-profile>.avatar{width:45px;height:52px}
+.home-profile strong{font-size:15px}.home-profile small{font-size:11px}
+.goal-badge{min-width:68px;padding:10px 7px;border-radius:13px}
+.goal-badge strong{font-size:22px}.goal-badge span{margin-top:4px}
+.home-player-metrics{margin:10px 0 9px;gap:6px}
+.home-player-metrics>div{padding:9px 5px;border-radius:10px}
+.home-player-metrics span{font-size:10px}.home-player-metrics b{font-size:16px;margin-top:3px}
+.home-player-foot>span{font-size:11px}
+.info-card,.combo-card,.scorer-card,.bet-card,.backtest-panel,.draw-card-panel,.card{border-radius:16px}
+.scorer-card,.bet-card{padding:13px}
+.bet-meta{gap:7px}.bet-match{font-size:17px}
+.bet-market{padding:12px;border-radius:13px}.bet-market strong{font-size:20px}
+.bet-facts{gap:6px}.bet-facts>div{padding:9px 5px;border-radius:10px}
+.draw-results-section{margin:12px 0 15px}
+.draw-results-section>h3{font-size:15px}
+.draw-provisional-warning{padding:9px 11px;margin:8px 0 11px;font-size:12px;line-height:1.5}
+.draw-data-status{gap:5px;margin:9px 0}
+.draw-data-status span{padding:4px 7px;font-size:11px}
+.coverage-list{gap:3px;margin:8px 0}
+.coverage-line{padding:6px 0}
+.top nav{height:calc(66px + env(safe-area-inset-bottom));padding:6px 10px calc(6px + env(safe-area-inset-bottom))}
+.top nav button{height:52px;min-width:0;padding:0 9px;font-size:11px;gap:2px}
+.top nav button svg{width:23px;height:23px}
+@media(max-width:700px){
+ .app-header{padding:13px 12px 11px}.brand-icon{width:40px;height:40px}
+ .brand strong{font-size:20px}.brand small{font-size:10px}
+ .calendar-card{padding:7px 8px}.calendar-card>svg{width:18px;height:18px}
+ .sportbar{padding:0 10px}.sports{gap:6px}
+ .sport-card{padding:10px 6px;gap:5px;flex-wrap:wrap;min-height:75px}
+ .sport-card strong{font-size:12px}.sport-card small{font-size:9px}
+ .sport-symbol{font-size:19px}
+ .wrap{padding:0 10px}
+ .dashboard{gap:6px}.dashboard-stat{min-height:87px;padding:9px 3px;border-radius:12px}
+ .dashboard-stat svg{width:19px;height:19px}.dashboard-stat strong{font-size:18px}
+ .dashboard-stat>span{font-size:9px}
+ .home-player-card{padding:11px;border-radius:15px}
+ .home-profile>.avatar{width:39px;height:46px}.home-profile strong{font-size:14px}
+ .goal-badge{min-width:60px}.goal-badge strong{font-size:20px}
+ .drawpick.bet-card{padding:11px}.bet-match{font-size:16px}
+ .drawpick .bet-market strong{font-size:18px}
+ .drawpick .bet-analysis>.scorer-evidence{font-size:11px;padding:7px 9px}
+ .top nav button{font-size:10px;padding:0 5px}
+}
