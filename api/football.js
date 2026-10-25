@@ -29,7 +29,26 @@ const missingTeams=new Map();
 for(const g of games)for(const id of [g.homeId,g.awayId]){
  if(!representedTeams.has(Number(id))&&!missingTeams.has(id))missingTeams.set(id,{team:id,league:g.leagueId,season:g.season});
 }
-const missingSelection=[...missingTeams.values()].slice(0,4);
+// Rotate extra squad requests across leagues rather than letting fixture order
+// exhaust the allowance before major leagues are reached.
+const priority=[78,79,39,140,135,61,40,141,136,62,88,94,203,179,180,113,114];
+const buckets=new Map();
+for(const item of missingTeams.values()){
+ if(!buckets.has(item.league))buckets.set(item.league,[]);
+ buckets.get(item.league).push(item);
+}
+const leagueOrder=[...buckets.keys()].sort((a,b)=>{
+ const ai=priority.indexOf(a),bi=priority.indexOf(b);
+ return (ai<0?1000:ai)-(bi<0?1000:bi)||a-b;
+});
+const missingSelection=[];
+while(missingSelection.length<16&&leagueOrder.some(id=>buckets.get(id).length)){
+ for(const id of leagueOrder){
+  const next=buckets.get(id).shift();
+  if(next)missingSelection.push(next);
+  if(missingSelection.length>=16)break;
+ }
+}
 if(missingSelection.length){
  const extra=await Promise.allSettled(missingSelection.map(({team,league,season})=>api(`/players?team=${team}&league=${league}&season=${season}&page=1`,key).then(rows=>({league,rows}))));
  results.push(...extra);
@@ -148,6 +167,15 @@ players=players.filter(p=>p.participation==='Startelf bestätigt');}
 // Spread initial candidates across matches, then fill any remaining places globally.
 const picked=[];const seen=new Set();for(const g of games){const p=players.find(p=>p.fixtureId===g.id&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
 const lineupDisplay=games.map(g=>({fixtureId:g.id,confirmed:!!lineups.get(g.id)?.published,teams:lineups.get(g.id)?.sides||[]}));
-const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length,flashscoreFeedConfigured:independent.configured,flashscoreFeedAvailable:independent.available,flashscoreMatchedPlayers:[...playerByKey.values()].filter(p=>p.independentEvidence).length,flashscoreIssue:independent.issue||null},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+const failed=results.filter(r=>r.status==='rejected').length;
+const coverage=[...sets.values()].map(({league,season})=>{
+ const leagueGames=games.filter(g=>g.leagueId===league),teamIds=[...new Set(leagueGames.flatMap(g=>[g.homeId,g.awayId]))];
+ const represented=[...new Set([...playerByKey.values()].filter(p=>leagueGames.some(g=>g.id===p.fixtureId)).map(p=>Number(p.teamId)))];
+ return {leagueId:league,leagueName:leagueGames[0]?.league||'',fixtures:leagueGames.length,
+  teams:teamIds.length,teamsWithPlayerData:teamIds.filter(id=>represented.includes(Number(id))).length,
+  players:[...new Set([...playerByKey.values()].filter(p=>leagueGames.some(g=>g.id===p.fixtureId)).map(p=>p.id))].length,
+  status:results.some(r=>r.status==='fulfilled'&&r.value.league===league)?'partial':'unavailable'};
+});
+res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],coverage,coverageComplete:coverage.every(x=>x.teams===x.teamsWithPlayerData),dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length,teamsWithoutPlayerData:coverage.reduce((n,x)=>n+x.teams-x.teamsWithPlayerData,0),flashscoreFeedConfigured:independent.configured,flashscoreFeedAvailable:independent.available,flashscoreMatchedPlayers:[...playerByKey.values()].filter(p=>p.independentEvidence).length,flashscoreIssue:independent.issue||null},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader; die Abdeckung wird pro Liga ausgewiesen. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
 
