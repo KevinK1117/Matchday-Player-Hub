@@ -414,6 +414,7 @@ async function refreshPregameLineups(){
  const id=g.fixture.id,token=modalToken,kind=g.sport==='nhl'?'nhl':'football';
  try{
   const payload=(await get({action:'lineups',id},kind)).data;
+  lineupCheckTimes.set(String(id),Date.now());
   if(token!==modalToken||detail?.fixture?.fixture?.id!==id)return;
   if(kind==='football'){
    if(!Array.isArray(payload?.lineups))return;
