@@ -1,4 +1,5 @@
 import {isTopFlight} from '../public/competitions.js';
+import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
 const cache=new Map(),pending=new Map();
 let activeRequests=0;const waiters=[];
@@ -112,7 +113,7 @@ function ranks(standings,id){
  const row=groups.flat().find(x=>Number(x.team?.id)===Number(id));
  return row?{rank:row.rank,points:row.points,played:row.all?.played,goalDiff:row.goalsDiff}:null;
 }
-async function evaluate(g,key,date,odds){
+async function evaluate(g,key,date,odds,independent){
  const h=g.teams.home,a=g.teams.away;
  const [home,away,h2h,standings]=await Promise.allSettled([
   api('/fixtures?team='+h.id+'&league='+g.league.id+'&season='+g.league.season+'&last=20',key),
@@ -141,8 +142,18 @@ async function evaluate(g,key,date,odds){
  const aAttack=shrunk(af.awayScored,af.scored,af.awayPlayed,af.last5Scored);
  const hDefence=shrunk(hf.homeConceded,hf.conceded,hf.homePlayed,hf.last5Conceded);
  const bound=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
- const lambdaHome=bound((hAttack*.52+aDefence*.48)*1.06,.25,3.6);
- const lambdaAway=bound((aAttack*.52+hDefence*.48)*.95,.25,3.6);
+ let lambdaHome=bound((hAttack*.52+aDefence*.48)*1.06,.25,3.6);
+ let lambdaAway=bound((aAttack*.52+hDefence*.48)*.95,.25,3.6);
+ // When a separately authorized, reliably mapped second source is configured,
+ // require reasonable agreement rather than blindly increasing a prediction score.
+ const independentFixture=independent?.fixtures?.get(String(g.fixture.id))||null;
+ if(independentFixture){
+   if(Math.abs(lambdaHome-independentFixture.expectedHomeGoals)>1.25||
+      Math.abs(lambdaAway-independentFixture.expectedAwayGoals)>1.25)
+     return {status:'sourceConflict',picks:[]};
+   lambdaHome=bound(lambdaHome*.75+independentFixture.expectedHomeGoals*.25,.25,3.6);
+   lambdaAway=bound(lambdaAway*.75+independentFixture.expectedAwayGoals*.25,.25,3.6);
+ }
  const poisson=(n,lambda)=>{let p=Math.exp(-lambda);for(let k=1;k<=n;k++)p*=lambda/k;return p};
  let probHome=0,probDraw=0,probAway=0,weight=0;
  for(let x=0;x<=9;x++)for(let y=0;y<=9;y++){
@@ -190,7 +201,7 @@ async function evaluate(g,key,date,odds){
   const score=Math.max(0,Math.min(88,p.score+(marketProbability==null?0:marketProbability<.12?-14:marketProbability<.20?-7:marketProbability>.40?3:0)));
   // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
   // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
-  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
+  return {...p,score,marketProbability:marketProbability==null?null:Math.round(marketProbability*1000)/10,oddsSource:market?.bookmaker||null,independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score).slice(0,1)};
 }
 export default async function handler(req,res){
@@ -201,7 +212,7 @@ export default async function handler(req,res){
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
-  const odds=await externalOdds(date);
+  const [odds,independent]=await Promise.all([externalOdds(date),getFlashscoreEvidence(date,'football')]);
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
   // Balance coverage across competitions rather than taking only the earliest 12 kickoffs.
   fixtures.sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
@@ -217,8 +228,8 @@ export default async function handler(req,res){
    if(selected.length===maxFixtures)break;
    if(!included.has(g.fixture.id)){included.add(g.fixture.id);selected.push(g)}
   }
-  const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds))))}
-  const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length};
+  const results=[];for(let i=0;i<selected.length;i+=3){results.push(...await Promise.allSettled(selected.slice(i,i+3).map(g=>evaluate(g,key,date,odds,independent))))}
+  const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date,odds);
   const candidates=[],seenFixtures=new Set();
@@ -231,6 +242,6 @@ export default async function handler(req,res){
   let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(!candidates.length&&preliminary.length)notice+=' Keine unabhängig bestätigten Tipps: zusätzliche Prognose- oder Quotendaten fehlen.';
-  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:results.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
