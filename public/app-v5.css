@@ -98,3 +98,12 @@
 .drawpick.is-provisional .draw-validation-label{color:#80672e}
 .drawpick.is-provisional .bet-number{background:#eeeae2;color:#695e44}
 @media(max-width:480px){.draw-results-section>h3{font-size:15px}.draw-provisional-warning{padding:11px 12px}}
+
+/* Mobile draw analysis: prevent long evidence labels from overflowing the cards. */
+.draw-card-panel,.drawpanel,.drawpick,.bet-card,.bet-analysis{min-width:0;max-width:100%;box-sizing:border-box}
+.drawpick .bet-analysis{display:flex;flex-direction:column;align-items:stretch;gap:8px;overflow-wrap:anywhere}
+.drawpick .bet-analysis>span,.drawpick .bet-analysis>.scorer-evidence,.drawpick .bet-analysis>details{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;word-break:normal;margin:0}
+.drawpick .bet-analysis>.scorer-evidence{font-size:12px;line-height:1.55;padding:9px 11px}
+.drawpick .bet-facts{min-width:0;max-width:100%}
+.drawpick .bet-facts>div{min-width:0;overflow-wrap:anywhere}
+@media(max-width:480px){.drawpick.bet-card{padding:13px}.drawpick .bet-analysis{gap:9px}.drawpick .bet-market strong{font-size:20px}}
