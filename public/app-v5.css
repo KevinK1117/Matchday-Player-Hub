@@ -200,3 +200,5 @@ body[data-view=combo] .draw-data-status span{padding:3px 6px;font-size:10px}
 .drawpick{position:relative}.draw-prob-top{font-weight:850;color:#148e6f;font-size:17px;text-align:right;margin:-3px 0 7px}
 .draw-prob-top small{display:block;font-weight:500;font-size:9px;color:#7c8a98}
 @media(max-width:700px){body[data-view=combo] .rightcol{display:block}body[data-view=combo] .rightcol>section{margin-bottom:10px}}
+
+.scorer-market{display:flex;align-items:center;justify-content:space-between;gap:8px}.scorer-prob{font-size:16px;font-weight:850;color:#0b8065;text-align:right;white-space:nowrap}.scorer-prob small{display:block;font-size:9px;font-weight:500;color:#667e77}.draw-compact-detail{margin-top:9px;border-top:1px solid #e5e9ed;padding-top:7px;font-size:11px;color:#637384}.draw-compact-detail summary{cursor:pointer;font-weight:650}.draw-compact-detail p{line-height:1.5;margin:7px 0}.drawpick .draw-prob-top{margin-top:-5px}.drawpick .bet-facts{margin-bottom:4px}
