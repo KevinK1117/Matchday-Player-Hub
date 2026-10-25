@@ -26,7 +26,8 @@ const future=allGames.filter(g=>g.status==='NS'&&Date.parse(g.start)>Date.now()+
 const relevant=wantedLeague?future.filter(g=>g.leagueId===wantedLeague):future;
 const priorityIndex=id=>{const at=preferred.indexOf(id);return at<0?1000:at};
 const leagueIds=[...new Set(relevant.map(g=>g.leagueId))].sort((a,b)=>priorityIndex(a)-priorityIndex(b)||a-b);
-const chosen=new Set(leagueIds.slice(0,16));
+// Every enabled league with an upcoming fixture is considered, not just the first 16.
+const chosen=new Set(leagueIds);
 const games=relevant.filter(g=>chosen.has(g.leagueId));
 if(!games.length)return res.status(200).json({configured:true,games:[],players:[],allPlayers:[],coverage:[],eligible:0,notice:'Keine kommenden Spiele für die ausgewählte Liga am gewählten Tag.',updatedAt:new Date().toISOString()});
 // Top scorers are competition-specific historical season stats, not fixture-confirmed lineups.
@@ -52,11 +53,13 @@ const leagueOrder=[...buckets.keys()].sort((a,b)=>{
  return (ai<0?1000:ai)-(bi<0?1000:bi)||a-b;
 });
 const missingSelection=[];
-while(missingSelection.length<16&&leagueOrder.some(id=>buckets.get(id).length)){
+// Distribute additional team-stat lookups fairly across every league; no league is excluded.
+const maxTeamLookups=Math.min(40,Math.max(16,leagueOrder.length*2));
+while(missingSelection.length<maxTeamLookups&&leagueOrder.some(id=>buckets.get(id).length)){
  for(const id of leagueOrder){
   const next=buckets.get(id).shift();
   if(next)missingSelection.push(next);
-  if(missingSelection.length>=16)break;
+  if(missingSelection.length>=maxTeamLookups)break;
  }
 }
 if(missingSelection.length){
