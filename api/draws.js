@@ -100,7 +100,7 @@ async function enrichCandidates(candidates,key,date,odds){
     predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
     evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
  }));
- return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
+ return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),screened:limited.length,rejected:enriched.filter(x=>x==null).length,injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
 }
 const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
 export function form(rows,id,date){
@@ -267,20 +267,27 @@ export default async function handler(req,res){
   const diagnostics={providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date,odds);
-  const candidates=[],seenFixtures=new Set();
+  // Prefer additionally checked signals over model-only entries. Never let
+  // high-scoring provisional entries crowd out verified signals from the list.
+  const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
   for(const pick of evidence.candidates){
     if(seenFixtures.has(pick.fixtureId))continue;
-    seenFixtures.add(pick.fixtureId);candidates.push(pick);
-    if(candidates.length>=count)break;
+    seenFixtures.add(pick.fixtureId);
+    (pick.dataQuality==='Vorläufig – nicht unabhängig bestätigt'?provisionalCandidates:verifiedCandidates).push(pick);
   }
-  const verifiedCandidates=candidates.filter(x=>x.dataQuality!=='Vorläufig – nicht unabhängig bestätigt');
-  const provisionalCandidates=candidates.filter(x=>x.dataQuality==='Vorläufig – nicht unabhängig bestätigt');
+  const candidates=[...verifiedCandidates,...provisionalCandidates].slice(0,count);
   const complete=verifiedCandidates.length>=count;
-  let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' bestätigte und '+provisionalCandidates.length+' vorläufige Kandidaten. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
+  diagnostics.modelSignals=preliminary.length;
+  diagnostics.additionalChecks=evidence.screened;
+  diagnostics.rejectedByChecks=evidence.rejected;
+  diagnostics.additionalEvidence=verifiedCandidates.length;
+  diagnostics.provisional=provisionalCandidates.length;
+  let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' zusätzlich geprüfte und '+provisionalCandidates.length+' vorläufige Modellkandidaten. Für eine vollständige Kombi fehlen weitere geprüfte Auswahlen.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(considered<fixtures.length)notice+=' Datenanbieter-Zeitbudget: '+considered+' von '+fixtures.length+' Spielen analysiert; übrige Spiele noch nicht geprüft.';
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
-  if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind keine unabhängig bestätigten Wettempfehlungen.';
+  if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht für eine verifizierte Wettkombi geeignet.';
+  if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
   return res.status(200).json({configured:true,date,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
