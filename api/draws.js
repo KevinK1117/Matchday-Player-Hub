@@ -51,7 +51,7 @@ async function enrichCandidates(candidates,key,date,odds){
  // Cap extra calls to protect the user's API-Sports quota.
  let injuries=[],injuriesAvailable=false;
  try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
- const limited=candidates.slice(0,15);
+ const limited=candidates.slice(0,20);
  const enriched=await Promise.all(limited.map(async pick=>{
   let model=null,modelSource=null,modelError=null;
   try{
@@ -89,7 +89,10 @@ async function enrichCandidates(candidates,key,date,odds){
    if(side==='home'&&homeMissing>=3||side==='away'&&awayMissing>=3)score-=6;
    flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
   }else flags.push('Ausfalldaten nicht verfügbar');
-  const quality=(predictionProbability!=null&&pick.marketProbability!=null)?'Breite Datenbasis':predictionProbability!=null||pick.marketProbability!=null?'Ergänzende Kontrolle':'Nur Mannschaftsform';
+  if(predictionProbability==null&&pick.marketProbability==null)return null;
+  if(predictionProbability!=null&&predictionProbability<.23)return null;
+  if(pick.marketProbability!=null&&Number(pick.marketProbability)<18)return null;
+  const quality=(predictionProbability!=null&&pick.marketProbability!=null)?'Zwei externe Prüfungen':'Eine zusätzliche Prüfung';
   return {...pick,dataQuality:quality,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
     predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},qualityFlags:flags,modelError,
     evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[]),...(pick.oddsSource?['Externe Marktquoten: '+pick.oddsSource]:[])]};
@@ -218,10 +221,16 @@ export default async function handler(req,res){
   const diagnostics={providerErrors:results.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:results.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length};
   const preliminary=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date,odds);
-  const candidates=evidence.candidates.slice(0,count);
+  const candidates=[],seenFixtures=new Set();
+  for(const pick of evidence.candidates){
+    if(seenFixtures.has(pick.fixtureId))continue;
+    seenFixtures.add(pick.fixtureId);candidates.push(pick);
+    if(candidates.length>=count)break;
+  }
   const complete=candidates.length>=count;
   let notice=!fixtures.length?'Keine kommenden Fußballspiele an diesem Tag. Anderen Tag wählen.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?candidates.length+' von '+count+' Kandidaten verfügbar. Noch keine vollständige Kombi.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende Tabellen- oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
+  if(!candidates.length&&preliminary.length)notice+=' Keine unabhängig bestätigten Tipps: zusätzliche Prognose- oder Quotendaten fehlen.';
   return res.status(200).json({configured:true,date,picks:complete?candidates:[],candidates,available:candidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},externalOdds:{configured:!!process.env.MATCH_ODDS_FEED_URL,available:odds.available,matchedFixtures:odds.byFixture.size,error:odds.error||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(odds.available?['Lizenzierter externer Quotenfeed']:[])],considered:selected.length,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
