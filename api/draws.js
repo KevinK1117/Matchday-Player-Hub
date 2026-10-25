@@ -2,22 +2,56 @@ import {isDrawCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
 const cache=new Map(),pending=new Map(),failed=new Map();
-let activeRequests=0;const waiters=[];
-async function providerSlot(){if(activeRequests<3)activeRequests++;else await new Promise(resolve=>waiters.push(resolve));return ()=>{const next=waiters.shift();if(next)next();else activeRequests--}}
-async function api(path,key){
- const cached=cache.get(path);if(cached&&cached.until>Date.now())return cached.value;
- const blocked=failed.get(path);if(blocked&&blocked.until>Date.now())throw Error(blocked.message);
- if(pending.has(path))return pending.get(path);
- const work=(async()=>{const release=await providerSlot();try{
- const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
- if(!response.ok){const message='API-Sports HTTP '+response.status;if([401,403,429].includes(response.status))failed.set(path,{message,until:Date.now()+(response.status===429?60000:300000)});throw Error(message)}
- const body=await response.json();
- if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length)){const errorText=JSON.stringify(body.errors).slice(0,220);const message='API-Sports Antwortfehler: '+errorText;failed.set(path,{message,until:Date.now()+120000});throw Error(message)}
- const value=body.response||[];cache.set(path,{value,until:Date.now()+600000});if(cache.size>750)cache.delete(cache.keys().next().value);return value;
- }finally{release()}})();
- pending.set(path,work);try{return await work}finally{pending.delete(path)}
+let activeRequests=0,providerCooldownUntil=0;const waiters=[];
+async function providerSlot(){
+ if(activeRequests<2)activeRequests++;
+ else await new Promise(resolve=>waiters.push(resolve));
+ return ()=>{const next=waiters.shift();if(next)next();else activeRequests--};
 }
-
+const failureMessage=errors=>JSON.stringify(errors).slice(0,220);
+function blockProvider(message,seconds){
+ const until=Date.now()+seconds*1000;
+ providerCooldownUntil=Math.max(providerCooldownUntil,until);
+ return message;
+}
+async function api(path,key){
+ const now=Date.now();
+ const cached=cache.get(path);
+ if(cached&&cached.until>now)return cached.value;
+ const blocked=failed.get(path);
+ if(blocked&&blocked.until>now)throw Error(blocked.message);
+ if(pending.has(path))return pending.get(path);
+ if(providerCooldownUntil>now)throw Error('API-Sports HTTP 429 (Anfragelimit; vorübergehend pausiert)');
+ const work=(async()=>{
+  const release=await providerSlot();
+  try{
+   if(providerCooldownUntil>Date.now())throw Error('API-Sports HTTP 429 (Anfragelimit; vorübergehend pausiert)');
+   const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
+   if(!response.ok){
+    const message='API-Sports HTTP '+response.status;
+    if(response.status===429)blockProvider(message,90);
+    if([401,403,429].includes(response.status))failed.set(path,{message,until:Date.now()+(response.status===429?90000:300000)});
+    throw Error(message);
+   }
+   const body=await response.json();
+   if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length)){
+    const errorText=failureMessage(body.errors),message='API-Sports Antwortfehler: '+errorText;
+    if(/rate.limit|too many|quota|requests.limit/i.test(errorText))blockProvider(message,90);
+    failed.set(path,{message,until:Date.now()+120000});
+    throw Error(message);
+   }
+   const value=body.response||[];
+   // Historical team results rarely change. Upcoming fixtures require fresher updates.
+   const ttl=/^\/fixtures\?date=/.test(path)?120000:/^\/fixtures\?team=/.test(path)?3600000:/^\/standings\?/.test(path)?1800000:/^\/predictions\?/.test(path)?900000:600000;
+   cache.set(path,{value,until:Date.now()+ttl});
+   if(cache.size>750)cache.delete(cache.keys().next().value);
+   if(failed.has(path))failed.delete(path);
+   return value;
+  }finally{release()}
+ })();
+ pending.set(path,work);
+ try{return await work}finally{pending.delete(path)}
+}
 
 function providerPercent(value){
  if(value==null)return null;
