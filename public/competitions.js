@@ -11,13 +11,13 @@ const domestic={
  Austria:'Bundesliga',
  Poland:'Ekstraklasa|Ekstraklasa|1. Liga|I Liga',
  Portugal:'Liga Portugal|Primeira Liga|Liga Portugal Betclic',
- Scotland:'Premiership|Premier League|Championship|Division 1',
+ Scotland:'Premiership|Premier League|Championship|Division 1|League One',
  Sweden:'Allsvenskan|Superettan',
  Switzerland:'Super League|Challenge League',
  Serbia:'Super Liga',
  Singapore:'Premier League',
- CzechRepublic:'Czech Liga|1. Liga|First League',
- Czechia:'Czech Liga|1. Liga|First League',
+ CzechRepublic:'Czech Liga|1. Liga|First League|1. Liga Czech',
+ Czechia:'Czech Liga|1. Liga|First League|1. Liga Czech',
  Turkey:'Süper Lig|Super Lig',
  Cyprus:'1. Division|Cyprus League|Cyprus League by Stoiximan',
  Greece:'Super League|Super League 1',
@@ -36,7 +36,7 @@ const domestic={
  SaudiArabia:'Pro League|Saudi Pro League|Saudi Professional League|Roshn Saudi League|Premier League'
 };
 const international={
- World:'World Cup|FIFA World Cup',
+ World:'World Cup|FIFA World Cup|UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
  Europe:'UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
  UEFA:'UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League'
 };
