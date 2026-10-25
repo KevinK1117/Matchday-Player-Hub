@@ -1,4 +1,4 @@
-import {isTopFlight} from '../public/competitions.js';
+import {isScorerCompetition} from '../public/competitions.js';
 const cache = new Map();
 const ROOT = 'https://v3.football.api-sports.io';
 async function api(path,key){
@@ -26,11 +26,11 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
  let data;
- if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isTopFlight({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
- if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isTopFlight(g.league));
+ if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isScorerCompetition({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
+ if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isScorerCompetition(g.league));
  if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
- if(!competitions.some(c=>isTopFlight({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur nationale Erstligen sind freigeschaltet'});
+ if(!competitions.some(c=>isScorerCompetition({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur europäische 1./2. Ligen und Saudi Pro League sind freigeschaltet'});
  if(action==='table')data=await api('/standings?league='+q.league+'&season='+q.season,key);
  }
  if(action==='player'){
@@ -38,7 +38,7 @@ export default async function handler(req,res){
  const team=profiles[0]?.statistics?.[0]?.team?.id;
  let recent=[],recentError=null;
  if(team){try{
- const fixtures=(await api('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isTopFlight(g.league)).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
+ const fixtures=(await api('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isScorerCompetition(g.league)).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
  recent=await Promise.all(fixtures.map(async g=>{try{const sides=await api('/fixtures/players?fixture='+g.fixture.id,key);const entry=sides.flatMap(s=>s.players||[]).find(p=>Number(p.player.id)===Number(q.id));const st=entry?.statistics?.[0];return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,minutes:st?.games?.minutes??null,goals:st?.goals?.total??null,shots:st?.shots?.total??null,onTarget:st?.shots?.on??null,available:!!st};}catch{return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,available:false}}}));
  }catch{recentError='Letzte Spiele nicht verfügbar'}}
  let participation='Keine kommende Begegnung verfügbar';
@@ -73,15 +73,15 @@ export default async function handler(req,res){
   // One fixture only, no standings/players/h2h fanout. Called every ~15min
   // from 60 minutes before kickoff while the page is active.
   const fixture=(await api('/fixtures?id='+q.id,key))[0];
-  if(!fixture||!isTopFlight(fixture.league))return res.status(404).json({error:'Spiel nicht gefunden'});
+  if(!fixture||!isScorerCompetition(fixture.league))return res.status(404).json({error:'Spiel nicht gefunden'});
   const rows=await api('/fixtures/lineups?fixture='+q.id,key);
   const perTeam=rows.map(side=>({teamId:side.team?.id,confirmed:(side.startXI||[]).length===11}));
   data={fixtureId:fixture.fixture.id,lineups:rows,teams:perTeam,fullyConfirmed:perTeam.length>=2&&perTeam.filter(x=>x.confirmed).length>=2,source:'API-Sports: offiziell gelistete Startelf',checkedAt:new Date().toISOString()};
  }
  if(action==='detail'){
- const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isTopFlight(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
+ const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isScorerCompetition(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
  const paths={stats:'/fixtures/statistics?fixture='+q.id,events:'/fixtures/events?fixture='+q.id,lineups:'/fixtures/lineups?fixture='+q.id,h2h:'/fixtures/headtohead?h2h='+g.teams.home.id+'-'+g.teams.away.id+'&last=10',homeRecent:'/fixtures?team='+g.teams.home.id+'&last=10&status=FT-AET-PEN',awayRecent:'/fixtures?team='+g.teams.away.id+'&last=10&status=FT-AET-PEN',table:'/standings?league='+g.league.id+'&season='+g.league.season};
- const entries=await Promise.all(Object.entries(paths).map(async([name,path])=>{try{const rows=await api(path,key);return [name,{data:['h2h','homeRecent','awayRecent'].includes(name)?rows.filter(x=>isTopFlight(x.league)):rows,error:null}]}catch{return [name,{data:[],error:'Daten nicht verfügbar'}]}}));data={fixture:g,...Object.fromEntries(entries)};
+ const entries=await Promise.all(Object.entries(paths).map(async([name,path])=>{try{const rows=await api(path,key);return [name,{data:['h2h','homeRecent','awayRecent'].includes(name)?rows.filter(x=>isScorerCompetition(x.league)):rows,error:null}]}catch{return [name,{data:[],error:'Daten nicht verfügbar'}]}}));data={fixture:g,...Object.fromEntries(entries)};
  }
  return res.status(200).json({configured:true,data,source:'API-Sports',updatedAt:new Date().toISOString()});
  }catch{return res.status(502).json({error:'Sportdaten konnten nicht geladen werden. Bitte später erneut versuchen oder API-Tarif prüfen.'})}
