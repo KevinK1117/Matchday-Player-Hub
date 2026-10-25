@@ -82,3 +82,9 @@
 .lineup-banner.lineup-confirmed{border-color:#9ad9bd;background:#eaf8f0;color:#17683d}
 .lineup-preview-title .lineup-status{max-width:100%;white-space:normal}
 @media(max-width:480px){.lineup-banner{font-size:11px;padding:10px}}
+
+/* Actual per-league audit for draw/upset match analysis */
+.coverage-list{display:grid;gap:7px;margin:12px 0}
+.coverage-line{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e2e8f0;padding:9px 0;color:#25394b;font-size:12px}
+.coverage-line strong{text-align:right;color:#577189;font-size:12px;font-weight:700}
+@media(max-width:480px){.coverage-line{align-items:flex-start;flex-direction:column;gap:3px}.coverage-line strong{text-align:left}}
