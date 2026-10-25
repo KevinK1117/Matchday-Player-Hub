@@ -1,18 +1,19 @@
 import {isDrawCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
-const cache=new Map(),pending=new Map();
+const cache=new Map(),pending=new Map(),failed=new Map();
 let activeRequests=0;const waiters=[];
 async function providerSlot(){if(activeRequests<3)activeRequests++;else await new Promise(resolve=>waiters.push(resolve));return ()=>{const next=waiters.shift();if(next)next();else activeRequests--}}
 async function api(path,key){
  const cached=cache.get(path);if(cached&&cached.until>Date.now())return cached.value;
+ const blocked=failed.get(path);if(blocked&&blocked.until>Date.now())throw Error(blocked.message);
  if(pending.has(path))return pending.get(path);
  const work=(async()=>{const release=await providerSlot();try{
  const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
- if(!response.ok)throw Error('API-Sports HTTP '+response.status);
+ if(!response.ok){const message='API-Sports HTTP '+response.status;if([401,403,429].includes(response.status))failed.set(path,{message,until:Date.now()+(response.status===429?60000:300000)});throw Error(message)}
  const body=await response.json();
- if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length)){const errorText=JSON.stringify(body.errors).slice(0,220);throw Error('API-Sports Antwortfehler: '+errorText)}
- const value=body.response||[];cache.set(path,{value,until:Date.now()+600000});if(cache.size>200)cache.delete(cache.keys().next().value);return value;
+ if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length)){const errorText=JSON.stringify(body.errors).slice(0,220);const message='API-Sports Antwortfehler: '+errorText;failed.set(path,{message,until:Date.now()+120000});throw Error(message)}
+ const value=body.response||[];cache.set(path,{value,until:Date.now()+600000});if(cache.size>750)cache.delete(cache.keys().next().value);return value;
  }finally{release()}})();
  pending.set(path,work);try{return await work}finally{pending.delete(path)}
 }
@@ -29,7 +30,7 @@ async function enrichCandidates(candidates,key,date){
  let injuries=[],injuriesAvailable=false;
  try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
  // Evaluate independent corroboration for signals from every represented league.
- const limited=candidates.slice(0,Math.min(18,candidates.length));
+ const limited=candidates.slice(0,Math.min(8,candidates.length));
  const enriched=await Promise.all(limited.map(async pick=>{
   let model=null,modelSource=null,modelError=null;
   try{
