@@ -115,18 +115,20 @@ function ranks(standings,id){
  return row?{rank:row.rank,points:row.points,played:row.all?.played,goalDiff:row.goalsDiff}:null;
 }
 async function evaluate(g,key,date,odds,independent){
- const h=g.teams.home,a=g.teams.away;
+ const h=g.teams.home,a=g.teams.away,isCup=g.league?.type==='Cup';
+ const historyPath=id=>'/fixtures?team='+id+(isCup?'&last=20':'&league='+g.league.id+'&season='+g.league.season+'&last=20');
  const [home,away,h2h,standings]=await Promise.allSettled([
-  api('/fixtures?team='+h.id+'&league='+g.league.id+'&season='+g.league.season+'&last=20',key),
-  api('/fixtures?team='+a.id+'&league='+g.league.id+'&season='+g.league.season+'&last=20',key),
+  api(historyPath(h.id),key),
+  api(historyPath(a.id),key),
   api('/fixtures/headtohead?h2h='+h.id+'-'+a.id+'&last=8',key),
-  api('/standings?league='+g.league.id+'&season='+g.league.season,key)
+  isCup?Promise.resolve([]):api('/standings?league='+g.league.id+'&season='+g.league.season,key)
  ]);
  if(home.status!=='fulfilled'||away.status!=='fulfilled'||standings.status!=='fulfilled')return {status:'providerError',picks:[]};
- const hf=form(home.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),h.id,date),af=form(away.value.filter(x=>Number(x.league?.id)===Number(g.league.id)),a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
+ const allowable=rows=>rows.filter(x=>isDrawCompetition(x.league)&&(isCup||Number(x.league?.id)===Number(g.league.id)));
+ const hf=form(allowable(home.value),h.id,date),af=form(allowable(away.value),a.id,date),hr=ranks(standings.value,h.id),ar=ranks(standings.value,a.id);
  const direct=(h2h.status==='fulfilled'?h2h.value:[]).filter(x=>completed(x)&&String(x.fixture.date).slice(0,10)<date).slice(0,8);
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||!hr||!ar)return {status:'insufficientData',picks:[]};
+ if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||(!isCup&&(!hr||!ar)))return {status:'insufficientData',picks:[]};
  const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
  const market=odds?.byFixture?.get(Number(g.fixture.id))||null;
  // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
@@ -167,16 +169,16 @@ async function evaluate(g,key,date,odds,independent){
  const h2hDraws=direct.filter(x=>x.goals.home===x.goals.away).length;
  const drawRate=(hf.drawRate+af.drawRate)/2;
  const formDifference=Math.abs(homeRate-awayRate);
- const rankDifference=Math.abs(Number(hr.rank)-Number(ar.rank));
+ const rankDifference=hr&&ar?Math.abs(Number(hr.rank)-Number(ar.rank)):null;
  const picks=[];
  // Draw: coherent goal expectations, balanced form and nontrivial model probability.
  if(probDraw>=.245&&drawRate>=.22&&formDifference<=.24&&Math.abs(lambdaHome-lambdaAway)<.65){
-  const raw=Math.min(82,45+(probDraw-.245)*200+(drawRate-.22)*25+(rankDifference<=5?3:0));
+  const raw=Math.min(82,45+(probDraw-.245)*200+(drawRate-.22)*25+(rankDifference!=null&&rankDifference<=5?3:0));
   picks.push({type:'Unentschieden',team:'X',score:Math.round(raw),modelProbability:Math.round(probDraw*1000)/10,marketSide:'draw',
-   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · Tabellenplätze '+hr.rank+'/'+ar.rank+' · H2H '+h2hDraws+'/'+direct.length});
+   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · '+(isCup?'Turnier ohne vergleichbare Ligatabelle':'Tabellenplätze '+hr.rank+'/'+ar.rank)+' · H2H '+h2hDraws+'/'+direct.length});
  }
- const homeUnderdog=Number(hr.rank)>=Number(ar.rank)+3;
- const awayUnderdog=Number(ar.rank)>=Number(hr.rank)+3;
+ const homeUnderdog=isCup?probHome+.15<probAway&&probHome<.4:Number(hr.rank)>=Number(ar.rank)+3;
+ const awayUnderdog=isCup?probAway+.15<probHome&&probAway<.4:Number(ar.rank)>=Number(hr.rank)+3;
  // An outsider is a standings outsider (or objectively an outsider in connected market odds).
  // Home/away momentum must support an upset; no purely high-price bets.
  if((homeUnderdog||(market?.home!=null&&market.home<.38&&market.away>.43))&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1.35&&hf.last5Points>=6&&probHome>=.21){
@@ -184,7 +186,7 @@ async function evaluate(g,key,date,odds,independent){
   if(momentum>=.1){
    const rating=Math.min(84,42+(probHome-.21)*110+Math.min(8,momentum*8));
    picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(rating),marketSide:'home',modelProbability:Math.round(probHome*1000)/10,
-    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · Tabelle '+hr.rank+'/'+ar.rank});
+    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · '+(isCup?'Turnier ohne Ligatabelle':'Tabelle '+hr.rank+'/'+ar.rank)});
   }
  }
  if((awayUnderdog||(market?.away!=null&&market.away<.38&&market.home>.43))&&af.awayPlayed>=3&&hf.homePlayed>=3&&af.awayPoints>=1.35&&af.last5Points>=6&&probAway>=.19){
@@ -192,7 +194,7 @@ async function evaluate(g,key,date,odds,independent){
   if(momentum>=.1){
    const rating=Math.min(84,40+(probAway-.19)*115+Math.min(8,momentum*8));
    picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(rating),marketSide:'away',modelProbability:Math.round(probAway*1000)/10,
-    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · Tabelle '+hr.rank+'/'+ar.rank});
+    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · '+(isCup?'Turnier ohne Ligatabelle':'Tabelle '+hr.rank+'/'+ar.rank)});
   }
  }
  return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
