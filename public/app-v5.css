@@ -176,3 +176,27 @@
  .drawpick .bet-analysis>.scorer-evidence{font-size:11px;padding:7px 9px}
  .top nav button{font-size:10px;padding:0 5px}
 }
+
+/* Extra-dense combo cards, readable on phones */
+body[data-view=combo] .rightcol{gap:9px}
+body[data-view=combo] .combo-card,body[data-view=combo] .draw-card-panel,body[data-view=combo] .card{padding:12px;border-radius:13px}
+body[data-view=combo] .scorer-grid{gap:7px}
+body[data-view=combo] .scorer-card,body[data-view=combo] .drawpick.bet-card{padding:9px;border-radius:12px}
+body[data-view=combo] .scorer-market{margin:-9px -9px 8px;padding:7px 9px;font-size:11px}
+body[data-view=combo] .scorer-profile{gap:7px}
+body[data-view=combo] .scorer-match{font-size:12px}
+body[data-view=combo] .scorer-metrics{gap:5px;margin:7px 0}
+body[data-view=combo] .bet-meta{gap:5px;font-size:11px}
+body[data-view=combo] .bet-number{width:26px;height:26px;font-size:12px}
+body[data-view=combo] .bet-match{font-size:15px;margin:8px 0}
+body[data-view=combo] .bet-market{padding:9px;gap:9px;border-radius:11px}
+body[data-view=combo] .bet-code{width:43px;height:43px;font-size:24px;border-radius:10px}
+body[data-view=combo] .bet-market strong{font-size:17px}
+body[data-view=combo] .bet-facts{gap:5px;margin:8px 0}
+body[data-view=combo] .bet-facts>div{padding:7px 4px}
+body[data-view=combo] .bet-analysis{font-size:11px;gap:5px}
+body[data-view=combo] .draw-data-status{margin:6px 0;gap:4px}
+body[data-view=combo] .draw-data-status span{padding:3px 6px;font-size:10px}
+.drawpick{position:relative}.draw-prob-top{font-weight:850;color:#148e6f;font-size:17px;text-align:right;margin:-3px 0 7px}
+.draw-prob-top small{display:block;font-weight:500;font-size:9px;color:#7c8a98}
+@media(max-width:700px){body[data-view=combo] .rightcol{display:block}body[data-view=combo] .rightcol>section{margin-bottom:10px}}
