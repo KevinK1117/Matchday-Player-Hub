@@ -11,7 +11,7 @@ async function api(path,key){
  const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
  if(!response.ok)throw Error('API-Sports HTTP '+response.status);
  const body=await response.json();
- if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length))throw Error('API-Sports Datenabruf eingeschränkt');
+ if(body.errors&&(Array.isArray(body.errors)?body.errors.length:Object.keys(body.errors).length)){const errorText=JSON.stringify(body.errors).slice(0,220);throw Error('API-Sports Antwortfehler: '+errorText)}
  const value=body.response||[];cache.set(path,{value,until:Date.now()+600000});if(cache.size>200)cache.delete(cache.keys().next().value);return value;
  }finally{release()}})();
  pending.set(path,work);try{return await work}finally{pending.delete(path)}
@@ -91,7 +91,7 @@ async function evaluate(g,key,date,independent){
  // Two required team histories; standings and H2H are optional, never a reason
  // to discard an otherwise analyzable fixture when the provider rate-limits.
  const [home,away]=await Promise.allSettled([api(historyPath(h.id),key),api(historyPath(a.id),key)]);
- if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:String(home.reason?.message||away.reason?.message||'unknown').slice(0,100)};
+ if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:String(home.status==='rejected'?home.reason?.message:away.reason?.message||'unknown').slice(0,160)};
  const allowable=rows=>rows.filter(x=>isDrawCompetition(x.league)&&(isCup||Number(x.league?.id)===Number(g.league.id)));
  const hf=form(allowable(home.value),h.id,date),af=form(allowable(away.value),a.id,date);
  // Only ask for optional standings when both sides have enough history.
@@ -215,7 +215,7 @@ export default async function handler(req,res){
     if(Date.now()-started>budgetMs-12500)break;
     const index=next++;
     try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,independent)}}
-    catch(reason){results[index]={status:'rejected',reason}}
+    catch(reason){results[index]={status:'rejected',reason:String(reason?.message||reason).slice(0,160)}}
    }
   }));
   const considered=results.filter(Boolean).length;
@@ -231,6 +231,14 @@ export default async function handler(req,res){
   });
   const settledResults=results.filter(Boolean);
   const diagnostics={providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
+  const errorGroups=new Map();
+  for(const result of settledResults){
+   const raw=result.status==='rejected'?String(result.reason||'Unbekannt'):result.value?.status==='providerError'?String(result.value.errorCode||'Unbekannt'):null;
+   if(!raw)continue;
+   const type=/HTTP 429|rate.limit|requests limit/i.test(raw)?'Anfragelimit (429)':/HTTP 403|HTTP 401|subscription|plan|access/i.test(raw)?'API-Zugriff/Abonnement':/timeout|abort/i.test(raw)?'Zeitüberschreitung':/HTTP 5\d\d/i.test(raw)?'Anbieter-Serverfehler':/Antwortfehler/i.test(raw)?'API-Antwortfehler':raw.slice(0,95);
+   errorGroups.set(type,(errorGroups.get(type)||0)+1);
+  }
+  diagnostics.errorReasons=[...errorGroups].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>({reason,count}));
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
   const evidence=await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
