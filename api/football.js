@@ -1,4 +1,5 @@
 import {isTopFlight} from '../public/competitions.js';
+import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
 async function api(path,key){const r=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(16000)});if(!r.ok)throw Error('API-Sports HTTP '+r.status);const j=await r.json();if(j.errors && (Array.isArray(j.errors)?j.errors.length:Object.keys(j.errors).length))throw Error('API-Sports: '+JSON.stringify(j.errors).slice(0,140));return j.response||[]}
 // Optional licensed xG provider JSON adapter; keyed by API-Sports fixture and player IDs.
@@ -45,6 +46,7 @@ const lineups=new Map(lineupResults.filter(x=>x.status==='fulfilled').map(x=>[x.
 let injuries=[],injuriesAvailable=false,injuryError=null;
 try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}
 catch(e){injuryError=String(e.message||e).slice(0,80)}
+const independent=await getFlashscoreEvidence(date,'football');
 const byFixturePlayer=new Map();
 for(const item of injuries){
  const fixtureId=item.fixture?.id,playerId=item.player?.id;
@@ -101,6 +103,17 @@ for(const r of defensiveResults){
 }
 for(const p of playerByKey.values()){
   const lineup=lineups.get(p.fixtureId);
+  const corroboration=independent.players.get(String(p.fixtureId)+':'+String(p.id))||null;
+  if(corroboration){
+    p.independentEvidence='Autorisierter Flashscore-Datenfeed';
+    p.externalXG90=corroboration.xG90;
+    p.externalShotsOnTarget90=corroboration.shotsOnTarget90;
+    p.externalExpectedMinutes=corroboration.expectedMinutes;
+    if(corroboration.status==='out'||corroboration.status==='confirmed_bench'&&lineup?.published)
+      {p.unavailable=true;p.participation='Extern als Ausfall/Bank gemeldet';}
+    else if(corroboration.status==='doubtful'&&!lineup?.published){p.questionable=true;p.participation='Einsatz fraglich';}
+    if(p.xG90==null&&corroboration.xG90!=null){p.xG90=corroboration.xG90;p.xGSource='Autorisierter Flashscore-Datenfeed';}
+  }
   if(p.unavailable){p.score=-Infinity;p.exclusionReason='Ausfall für diese Begegnung gemeldet'}
   else if(lineup?.published && !lineup.ids.has(p.id)){p.score=-Infinity;p.exclusionReason='Nicht in bestätigter Startelf'}
   else {
@@ -116,7 +129,18 @@ for(const p of playerByKey.values()){
     const defenceFactor=ga==null?1:Math.min(1.22,Math.max(.8,.80+ga*.14));
     p.score=(p.goalsPerGame*4+involvement*1.4+(p.penaltyGoals>0?0.25:0))*minutesFactor*sampleFactor*availabilityFactor*defenceFactor;
     if(p.xG90!=null)p.score+=Math.min(1.5,p.xG90)*1.5*minutesFactor;
-    p.exclusionReason=(p.minutesPerGame||0)<45?'Zu geringe durchschnittliche Einsatzzeit':null;
+    if(corroboration?.shotsOnTarget90!=null&&p.minutesPerGame>0){
+      const seasonShotRate90=Math.max(.2,(Number(p.shotsPerGame)||0)*90/p.minutesPerGame);
+      const difference=(corroboration.shotsOnTarget90-seasonShotRate90)/seasonShotRate90;
+      p.score*=1+Math.max(-.10,Math.min(.10,difference*.08));
+    }
+    if(corroboration?.expectedMinutes!=null){
+      if(corroboration.expectedMinutes<45)p.exclusionReason='Zu geringe erwartete Einsatzzeit laut Zusatzquelle';
+      else if(corroboration.expectedMinutes<65)p.score*=.78;
+    }
+    if((p.minutesPerGame||0)<45)p.exclusionReason='Zu geringe durchschnittliche Einsatzzeit';
+    p.score=Math.max(0,p.score);
+  
   }
 }
 let players=[...playerByKey.values()].filter(p=>!p.exclusionReason&&Number.isFinite(p.score)).sort((a,b)=>b.score-a.score||b.minutesPerGame-a.minutesPerGame);if(confirmedOnly){ // Upcoming games have no officially confirmed lineup in this API response.
@@ -124,6 +148,6 @@ players=players.filter(p=>p.participation==='Startelf bestätigt');}
 // Spread initial candidates across matches, then fill any remaining places globally.
 const picked=[];const seen=new Set();for(const g of games){const p=players.find(p=>p.fixtureId===g.id&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}for(const p of players){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
 const lineupDisplay=games.map(g=>({fixtureId:g.id,confirmed:!!lineups.get(g.id)?.published,teams:lineups.get(g.id)?.sides||[]}));
-const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[])],dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+const failed=results.filter(r=>r.status==='rejected').length;res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length,flashscoreFeedConfigured:independent.configured,flashscoreFeedAvailable:independent.available,flashscoreMatchedPlayers:[...playerByKey.values()].filter(p=>p.independentEvidence).length,flashscoreIssue:independent.issue||null},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Topscorer-Endpunkt liefert keine vollständigen Kader. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
 
