@@ -100,7 +100,7 @@ async function evaluate(g,key,date,independent){
  const hr=ranks(standings,h.id),ar=ranks(standings,a.id);
  const direct=[];
  const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2||false)return {status:'insufficientData',picks:[]};
+ 
  const homeRate=hf.last5Points/Math.max(1,hf.last5Played*3),awayRate=af.last5Points/Math.max(1,af.last5Played*3);
  // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
  // are shrunk toward neutral scoring rates to guard against small samples.
@@ -145,27 +145,27 @@ async function evaluate(g,key,date,independent){
  // Draw: coherent goal expectations, balanced form and nontrivial model probability.
  if(probDraw>=.245&&drawRate>=.22&&formDifference<=.24&&Math.abs(lambdaHome-lambdaAway)<.65){
   const raw=Math.min(82,45+(probDraw-.245)*200+(drawRate-.22)*25+(rankDifference!=null&&rankDifference<=5?3:0));
-  picks.push({type:'Unentschieden',team:'X',score:Math.round(raw),modelProbability:Math.round(probDraw*1000)/10,marketSide:'draw',
-   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · '+(isCup?'Turnier ohne vergleichbare Ligatabelle':'Tabellenplätze '+hr.rank+'/'+ar.rank)+' · H2H '+h2hDraws+'/'+direct.length});
+  picks.push({type:'Unentschieden',team:'X',score:Math.round(raw),modelProbability:Math.round(probDraw*1000)/10,
+   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · '+(hr&&ar?'Tabellenplätze '+hr.rank+'/'+ar.rank:'Keine vergleichbare Ligatabelle')+' · H2H '+h2hDraws+'/'+direct.length});
  }
- const homeUnderdog=isCup?probHome+.15<probAway&&probHome<.4:Number(hr.rank)>=Number(ar.rank)+3;
- const awayUnderdog=isCup?probAway+.15<probHome&&probAway<.4:Number(ar.rank)>=Number(hr.rank)+3;
+ const homeUnderdog=hr&&ar?Number(hr.rank)>=Number(ar.rank)+3:probHome+.15<probAway&&probHome<.4;
+ const awayUnderdog=hr&&ar?Number(ar.rank)>=Number(hr.rank)+3:probAway+.15<probHome&&probAway<.4;
  // Outsiders are identified from standings or model strength differences.
  // Home/away momentum must support an upset; no purely high-price bets.
- if((homeUnderdog||(market?.home!=null&&market.home<.38&&market.away>.43))&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1.35&&hf.last5Points>=6&&probHome>=.21){
+ if((homeUnderdog)&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1.35&&hf.last5Points>=6&&probHome>=.21){
   const momentum=hf.homePoints-af.awayPoints;
   if(momentum>=.1){
    const rating=Math.min(84,42+(probHome-.21)*110+Math.min(8,momentum*8));
-   picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(rating),marketSide:'home',modelProbability:Math.round(probHome*1000)/10,
-    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · '+(isCup?'Turnier ohne Ligatabelle':'Tabelle '+hr.rank+'/'+ar.rank)});
+   picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(rating),modelProbability:Math.round(probHome*1000)/10,
+    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · '+(hr&&ar?'Tabelle '+hr.rank+'/'+ar.rank:'Ohne verfügbare Ligatabelle')});
   }
  }
- if((awayUnderdog||(market?.away!=null&&market.away<.38&&market.home>.43))&&af.awayPlayed>=3&&hf.homePlayed>=3&&af.awayPoints>=1.35&&af.last5Points>=6&&probAway>=.19){
+ if((awayUnderdog)&&af.awayPlayed>=3&&hf.homePlayed>=3&&af.awayPoints>=1.35&&af.last5Points>=6&&probAway>=.19){
   const momentum=af.awayPoints-hf.homePoints;
   if(momentum>=.1){
    const rating=Math.min(84,40+(probAway-.19)*115+Math.min(8,momentum*8));
-   picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(rating),marketSide:'away',modelProbability:Math.round(probAway*1000)/10,
-    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · '+(isCup?'Turnier ohne Ligatabelle':'Tabelle '+hr.rank+'/'+ar.rank)});
+   picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(rating),modelProbability:Math.round(probAway*1000)/10,
+    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · '+(hr&&ar?'Tabelle '+hr.rank+'/'+ar.rank:'Ohne verfügbare Ligatabelle')});
   }
  }
  return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
