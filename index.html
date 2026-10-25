@@ -212,7 +212,16 @@ function nhlTable(rows){return rows.length?`<div class="tablewrap"><table><tr><t
 async function loadScorers(g){const el=$('detailbody');el.innerHTML='<div class="loading">Topscorer laden …</div>';try{const rows=demoMode?demoPlayers:(await get({action:'scorers',league:g.league.id,season:g.league.season})).data;if(el!==$('detailbody')||tab!=='scorers')return;el.innerHTML=rows?.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${g.league.season}"><b>${i+1}</b>${portrait(p.player.id,sport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,g.league.season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.goals?.total)} Tore</small></span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar.</div>'}catch(e){if(el===$('detailbody')&&tab==='scorers')el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
 const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Tabelle · letzte 5 Spiele · Heim-/Auswärtsform</p><label for="drawCount">Kombi-Größe</label><select id="drawCount">${[6,7,8,9,10].map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Tabellen-Außenseiter · Index ist keine Gewinnwahrscheinlichkeit.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
 backtestSection.innerHTML='<div class="backtest-wrap"><div class="eyebrow">FUSSBALL · QUALITÄTSCHECK</div><h2>Vergangene Tipps überprüfen</h2><p class="muted">Historische Spieltage werden ohne Daten aus der Zukunft bewertet. Ein Modell-Rücktest ist kein Nachweis früherer tatsächlich angezeigter Tipps.</p><div class="backtest-controls"><label for="backtestLeague">Wettbewerb</label><select id="backtestLeague" aria-label="Liga für Rücktest"></select><label for="backtestDays">Zeitraum</label><select id="backtestDays"><option value="14">Letzte 14 Tage</option><option value="30" selected>Letzte 30 Tage</option><option value="45">Letzte 45 Tage</option></select><button type="button" id="backtestRun" class="primary">Rücktest starten</button></div><div id="backtestResult" aria-live="polite"><p class="notice">Wähle eine Liga und starte den Vergleich mit vergangenen Ergebnissen.</p></div></div>';
-drawSection.after(backtestSection);
+// Both panels must be inserted before binding their controls. A detached panel
+// caused a startup TypeError and left the Home page completely blank.
+const comboPanel=$('combo-card');
+if(comboPanel){
+ comboPanel.after(drawSection);
+ drawSection.after(backtestSection);
+}else{
+ const fallback=document.querySelector('main')||document.body;
+ fallback.append(drawSection,backtestSection);
+}
 function syncBacktestLeagues(){
  const select=$('backtestLeague');if(!select)return;
  const old=select.value||'78',options=footballLeagueOptions().filter(x=>x[0]>0);
