@@ -217,7 +217,7 @@ export default async function handler(req,res){
   // Two guaranteed evaluation places per available high-priority competition,
   // before considering other leagues; remaining capacity is distributed fairly.
   // The Saudi first division is now explicitly eligible for both markets.
-  const preferred=[78,79,135,39,61,140,307,40,136,62,141,88,94,203,179,180,113,114];
+  const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
   const groups=new Map();
   for(const fixture of fixtures){
    const id=Number(fixture.league.id);
