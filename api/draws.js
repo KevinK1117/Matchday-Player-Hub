@@ -21,11 +21,11 @@ async function api(path,key){
  const blocked=failed.get(path);
  if(blocked&&blocked.until>now)throw Error(blocked.message);
  if(pending.has(path))return pending.get(path);
- if(providerCooldownUntil>now)throw Error('API-Sports HTTP 429 (Anfragelimit; vorübergehend pausiert)');
+ if(providerCooldownUntil>now)throw Error('API_PAUSED: Anbieter-Anfragen vorübergehend pausiert');
  const work=(async()=>{
   const release=await providerSlot();
   try{
-   if(providerCooldownUntil>Date.now())throw Error('API-Sports HTTP 429 (Anfragelimit; vorübergehend pausiert)');
+   if(providerCooldownUntil>Date.now())throw Error('API_PAUSED: Anbieter-Anfragen vorübergehend pausiert');
    const response=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
    if(!response.ok){
     const message='API-Sports HTTP '+response.status;
@@ -247,7 +247,7 @@ export default async function handler(req,res){
   let next=0;
   await Promise.all(Array.from({length:Math.min(maxWorkers,selected.length)},async()=>{
    while(next<selected.length){
-    if(Date.now()-started>budgetMs-12500)break;
+    if(Date.now()-started>budgetMs-12500||providerCooldownUntil>Date.now())break;
     const index=next++;
     try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,independent)}}
     catch(reason){results[index]={status:'rejected',reason:String(reason?.message||reason).slice(0,160)}}
@@ -265,17 +265,17 @@ export default async function handler(req,res){
     status:checked===0?'not_checked':checked<total||dataErrors?'partial':'covered'};
   });
   const settledResults=results.filter(Boolean);
-  const diagnostics={providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
+  const diagnostics={providerPaused:providerCooldownUntil>Date.now(),unprocessed:selected.length-considered,providerErrors:settledResults.filter(r=>r.status==='rejected'||r.value?.status==='providerError').length,insufficientData:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='insufficientData').length,noSignal:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='noSignal').length,sourceConflict:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.status==='sourceConflict').length};
   const errorGroups=new Map();
   for(const result of settledResults){
    const raw=result.status==='rejected'?String(result.reason||'Unbekannt'):result.value?.status==='providerError'?String(result.value.errorCode||'Unbekannt'):null;
    if(!raw)continue;
-   const type=/HTTP 429|rate.limit|requests limit/i.test(raw)?'Anfragelimit (429)':/HTTP 403|HTTP 401|subscription|plan|access/i.test(raw)?'API-Zugriff/Abonnement':/timeout|abort/i.test(raw)?'Zeitüberschreitung':/HTTP 5\d\d/i.test(raw)?'Anbieter-Serverfehler':/Antwortfehler/i.test(raw)?'API-Antwortfehler':raw.slice(0,95);
+   const type=/API_PAUSED/i.test(raw)?'Anbieterpause (nicht erneut angefragt)':/HTTP 429|rate.limit|requests limit/i.test(raw)?'Anfragelimit (429)':/HTTP 403|HTTP 401|subscription|plan|access/i.test(raw)?'API-Zugriff/Abonnement':/timeout|abort/i.test(raw)?'Zeitüberschreitung':/HTTP 5\d\d/i.test(raw)?'Anbieter-Serverfehler':/Antwortfehler/i.test(raw)?'API-Antwortfehler':raw.slice(0,95);
    errorGroups.set(type,(errorGroups.get(type)||0)+1);
   }
   diagnostics.errorReasons=[...errorGroups].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>({reason,count}));
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
-  const evidence=await enrichCandidates(preliminary,key,date);
+  const evidence=providerCooldownUntil>Date.now()?{candidates:preliminary.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable:false,qualityFlags:['Anbieterpause: Zusatzprüfung ausgesetzt'],evidenceSources:['API-Sports: Tabelle/Form'],modelError:'Anbieterpause'})).slice(0,8),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
   // high-scoring provisional entries crowd out verified signals from the list.
   const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
