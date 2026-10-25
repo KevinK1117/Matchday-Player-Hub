@@ -327,7 +327,7 @@ $('drawGenerate').onclick=async()=>{
   const diagnostics=d.diagnostics?'<details class="analysis-details"><summary>Datenprüfung · '+esc(d.considered||0)+' / '+esc(d.totalFixtures||0)+' Spiele</summary><p>'+
    esc(d.diagnostics.modelSignals||0)+' Modell-Signale · '+esc(d.diagnostics.additionalChecks||0)+' Zusatzprüfungen · '+esc(d.diagnostics.rejectedByChecks||0)+' nach Zusatzprüfung ausgeschlossen · '+
    esc(d.diagnostics.insufficientData||0)+' ohne ausreichende Form-/Tabellendaten · '+esc(d.diagnostics.providerErrors||0)+' Abruffehler · '+
-   esc(d.diagnostics.noSignal||0)+' ohne passendes Signal · '+esc(d.diagnostics.sourceConflict||0)+' Quellenkonflikte.</p></details>':'';
+   esc(d.diagnostics.noSignal||0)+' ohne passendes Signal · '+esc(d.diagnostics.sourceConflict||0)+' Quellenkonflikte.</p>'+(d.diagnostics.errorReasons?.length?'<p><strong>API-Fehlerursachen:</strong> '+d.diagnostics.errorReasons.map(x=>esc(x.reason)+' ('+esc(x.count)+')').join(' · ')+'</p>':'')+'</details>':'';
   out.innerHTML='<p class="result-status">'+esc(d.notice||'')+'</p>'+comboNotice+
    '<p class="notice">'+(d.extraEvidence?.injuriesAvailable?'Ausfallmeldungen abgefragt.':'Ausfälle nur eingeschränkt verfügbar.')+'</p>'+
    verifiedBlock+provisionalBlock+empty+renderDrawCoverage(d)+diagnostics;
