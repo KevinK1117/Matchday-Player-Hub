@@ -6,11 +6,15 @@ async function api(path,key){
  const r=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(14000)});
  if(!r.ok)throw Error('Sportdatenanbieter antwortet mit HTTP '+r.status);
  const body=await r.json();if(body.errors&&Object.keys(body.errors).length)throw Error('Sportdaten derzeit nicht verfügbar. Tarif, Tageslimit oder Anbieter prüfen.');
- const data=body.response||[];cache.set(path,{until:Date.now()+(path.startsWith('/fixtures?date')?30000:300000),data});if(cache.size>200)cache.delete(cache.keys().next().value);return data;
+ const data=body.response||[];
+ // Official XIs may appear shortly before kickoff; do not serve a five-minute-old
+ // empty lineup from the server cache during the pre-match window.
+ const ttl=path.startsWith('/fixtures/lineups?')?20000:path.startsWith('/fixtures?id=')?20000:path.startsWith('/fixtures?date')?30000:300000;
+ cache.set(path,{until:Date.now()+ttl,data});if(cache.size>200)cache.delete(cache.keys().next().value);return data;
 }
 const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
- res.setHeader('Cache-Control','s-maxage=30, stale-while-revalidate=15');
+ res.setHeader('Cache-Control',String(req.query?.action||'')==='detail'?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
  if(!['fixtures','detail','table','player','squad','scorers','leagues'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
