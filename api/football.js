@@ -66,6 +66,26 @@ if(missingSelection.length){
  const extra=await Promise.allSettled(missingSelection.map(({team,league,season})=>api(`/players?team=${team}&league=${league}&season=${season}&page=1`,key).then(rows=>({league,rows}))));
  results.push(...extra);
 }
+// Head-to-head is evaluated only on finished meetings between these exact clubs.
+// No H2H record means no evidence of superiority, not an assumed win.
+const h2hGames=games.slice(0,24);
+const h2hResults=await Promise.allSettled(h2hGames.map(async g=>({id:g.id,homeId:g.homeId,awayId:g.awayId,rows:await api('/fixtures/headtohead?h2h='+g.homeId+'-'+g.awayId+'&last=8',key)})));
+const h2hByFixture=new Map();
+for(const result of h2hResults){
+ if(result.status!=='fulfilled')continue;
+ const {id,homeId,awayId,rows}=result.value;
+ const finished=(Array.isArray(rows)?rows:[]).filter(x=>['FT','AET','PEN'].includes(x.fixture?.status?.short)&&Number.isFinite(Number(x.goals?.home))&&Number.isFinite(Number(x.goals?.away)));
+ let homeWins=0,awayWins=0,draws=0;
+ for(const x of finished){
+  const homeGoals=Number(x.goals.home),awayGoals=Number(x.goals.away);
+  if(homeGoals===awayGoals){draws++;continue}
+  const winner=homeGoals>awayGoals?Number(x.teams?.home?.id):Number(x.teams?.away?.id);
+  if(winner===Number(homeId))homeWins++;
+  else if(winner===Number(awayId))awayWins++;
+ }
+ const superiorTeamId=finished.length>=3&&homeWins!==awayWins?(homeWins>awayWins?Number(homeId):Number(awayId)):null;
+ h2hByFixture.set(id,{played:finished.length,homeWins,awayWins,draws,superiorTeamId});
+}
 const playerByKey=new Map();for(const result of results){if(result.status!=='fulfilled')continue;const {league,rows}=result.value;for(const item of rows){for(const stat of item.statistics||[]){const matching=games.filter(g=>g.leagueId===league&&(g.homeId===stat.team?.id||g.awayId===stat.team?.id));if(!matching.length)continue;const played=Number(stat.games?.appearences||0),minutes=Number(stat.games?.minutes||0),goals=Number(stat.goals?.total||0),shots=stat.shots?.on==null?null:Number(stat.shots.on),penalties=Number(stat.penalty?.scored||0);if(!played)continue;for(const g of matching){const k=g.id+':'+item.player.id;const player={id:item.player.id,name:item.player.name,team:stat.team.name,teamId:stat.team.id,opponent:g.homeId===stat.team.id?g.away:g.home,fixtureId:g.id,league:g.league,goals,appearances:played,minutes,minutesPerGame:minutes/played,goalsPerGame:goals/played,totalShots:stat.shots?.total??null,shotsPerGame:shots===null?null:shots/played,penaltyGoals:penalties,xG:null,xG90:null,participation:'Nicht bestätigt',photo:item.player.photo,score:(goals/played)*5+(shots===null?0:shots/played)*1.7+(minutes/played)/90+penalties*.04};playerByKey.set(k,player)}}}}
 // Official lineups are returned only when the provider has published them.
 const lineupCandidates=games.filter(g=>{
@@ -141,6 +161,9 @@ for(const r of defensiveResults){
  if(goalsAgainst!=null&&Number.isFinite(goalsAgainst)&&goalsAgainst>=0&&goalsAgainst<10)opponentStats.set(r.value.id,goalsAgainst);
 }
 for(const p of playerByKey.values()){
+  const h2h=h2hByFixture.get(p.fixtureId);
+  p.h2h=h2h||null;
+  if(!h2h?.superiorTeamId||Number(p.teamId)!==h2h.superiorTeamId){p.exclusionReason='Kein belegter H2H-Vorteil für das Spielerteam';continue;}
   const lineup=lineups.get(p.fixtureId);
   const corroboration=independent.players.get(String(p.fixtureId)+':'+String(p.id))||null;
   if(corroboration){
@@ -199,6 +222,6 @@ const coverage=coverageLeagues.map(([league,name,season])=>{
   players:[...new Set([...playerByKey.values()].filter(p=>leagueGames.some(g=>g.id===p.fixtureId)).map(p=>p.id))].length,
   status:!chosen.has(league)?'not_checked':results.some(r=>r.status==='fulfilled'&&r.value.league===league)?(teamIds.length===represented.length?'covered':'partial'):'unavailable'};
 }).filter(Boolean);
-res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],coverage,coverageComplete:coverage.every(x=>x.status==='covered'),analyzedLeagues:chosen.size,totalEligibleLeagues:coverageLeagues.length,analyzedFixtures:games.length,allEligibleFixtures:future.length,dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length,teamsWithoutPlayerData:coverage.reduce((n,x)=>n+x.teams-x.teamsWithPlayerData,0),flashscoreFeedConfigured:independent.configured,flashscoreFeedAvailable:independent.available,flashscoreMatchedPlayers:[...playerByKey.values()].filter(p=>p.independentEvidence).length,flashscoreIssue:independent.issue||null},updatedAt:new Date().toISOString(),notice:`Fußball: Kandidaten nur aus tatsächlich angesetzten Teams. Abdeckung wird je Liga ausgewiesen. Eine Begegnung im Kalender bedeutet nicht, dass Spieler dafür erfolgreich geprüft wurden. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
+res.status(200).json({configured:true,games,eligible:players.length,players:picked,allPlayers:players,lineupDisplay,requested:count,dataSources:['API-Sports: direkte Duelle (H2H, mindestens 3 abgeschlossene Spiele)' ,'API-Sports: Liga-Torschützenwerte',...(missingSelection.length?['API-Sports: zusätzliche Mannschafts-Statistikseiten']:[]),'API-Sports: veröffentlichte Startelf',...(injuriesAvailable?['API-Sports: Ausfälle']:[]),...(opponentStats.size?['API-Sports: Gegner-Defensivstatistik']:[]),...(process.env.XG_FEED_URL?['Externer xG-Feed (optional)']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],coverage,h2hChecked:h2hByFixture.size,h2hRequested:h2hGames.length,coverageComplete:coverage.every(x=>x.status==='covered'),analyzedLeagues:chosen.size,totalEligibleLeagues:coverageLeagues.length,analyzedFixtures:games.length,allEligibleFixtures:future.length,dataQuality:{injuriesAvailable,injuryError,opponentTeamsChecked:statsKeys.length,defensiveStatsAvailable:opponentStats.size,additionalTeamPages:missingSelection.length,teamsWithoutPlayerData:coverage.reduce((n,x)=>n+x.teams-x.teamsWithPlayerData,0),flashscoreFeedConfigured:independent.configured,flashscoreFeedAvailable:independent.available,flashscoreMatchedPlayers:[...playerByKey.values()].filter(p=>p.independentEvidence).length,flashscoreIssue:independent.issue||null},updatedAt:new Date().toISOString(),notice:`Fußball: Scorer nur aus dem Team mit mehr Siegen in den letzten bis zu 8 direkten Duellen (mindestens 3 abgeschlossene H2H). Ohne belastbare H2H-Daten keine Auswahl. Abdeckung wird je Liga ausgewiesen. Eine Begegnung im Kalender bedeutet nicht, dass Spieler dafür erfolgreich geprüft wurden. Spieler außerhalb veröffentlichter Startelf und Spieler mit durchschnittlich weniger als 45 Minuten werden aus Kandidaten ausgeschlossen. Dieser Filter ist kein Nachweis für einen kommenden Einsatz. ${failed?'Einige Ligen konnten nicht geladen werden. ':''}${xgInfo}. Startelf wird ausschließlich bei veröffentlichten Aufstellungen bestätigt. Ohne verfügbare Quelle werden keine xG- oder Einsatzprognosen erfunden.`});
 }catch(e){res.status(502).json({error:'Football API nicht erreichbar',detail:String(e.message)})}}
 
