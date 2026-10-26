@@ -35,6 +35,7 @@ const domestic={
  UnitedStates:'Major League Soccer|MLS',
  SaudiArabia:'Pro League|Saudi Pro League|Saudi Professional League|Roshn Saudi League|Premier League'
 };
+const domesticCups={Germany:'DFB Pokal|DFB-Pokal|DFB-Pokal 2026/27'};
 const international={
  World:'World Cup|FIFA World Cup|UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
  Europe:'UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
@@ -42,7 +43,7 @@ const international={
 };
 export const normalizeCompetition=v=>String(v||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const makeMap=rows=>new Map(Object.entries(rows).map(([country,names])=>[normalizeCompetition(country),new Set(names.split('|').map(normalizeCompetition))]));
-const allowedDomestic=makeMap(domestic),allowedInternational=makeMap(international);
+const allowedDomestic=makeMap(domestic),allowedDomesticCups=makeMap(domesticCups),allowedInternational=makeMap(international);
 export function isInternationalCompetition(league){
  if(!league||league.type&&league.type!=='Cup')return false;
  return allowedInternational.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
@@ -50,6 +51,7 @@ export function isInternationalCompetition(league){
 export function isTopFlight(league){
  if(!league)return false;
  if(isInternationalCompetition(league))return true;
+ if((!league.type||league.type==='Cup')&&allowedDomesticCups.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name)))return true;
  if(league.type&&league.type!=='League')return false;
  return allowedDomestic.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
 }
