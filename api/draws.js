@@ -212,7 +212,7 @@ async function evaluate(g,key,date,independent){
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');
  const date=String(req.query?.date||''),count=Number(req.query?.count||6);
- if(!Number.isInteger(count)||count<6||count>10)return res.status(400).json({error:'6–10 Auswahlen wählen'});
+ if(!Number.isInteger(count)||count<6||count>20)return res.status(400).json({error:'6–20 Auswahlen wählen'});
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
