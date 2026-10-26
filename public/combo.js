@@ -16,7 +16,7 @@ function eligibleScorer(p,confirmedOnly=false){
 }
 // The scorer combination is a sport-statistics ranking without bookmaker pricing.
 export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=false){
- if(!Number.isInteger(count)||count<6||count>10)throw Error('6–10 Spieler wählen');
+ if(!Number.isInteger(count)||count<6||count>20)throw Error('6–20 Spieler wählen');
  const fixtures=new Map(games.filter(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>now+300000).map(g=>[String(g.fixture.id),g]));
  const ranked=[];
  for(const p of players){
