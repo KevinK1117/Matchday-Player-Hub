@@ -4,7 +4,7 @@ function eligibleScorer(p,confirmedOnly=false){
  const state=String(p.participation||'');
  if(state==='Ausfall gemeldet'||state.startsWith('Nicht in bestätigter Startelf')||state.startsWith('Extern als Ausfall'))return false;
  const nhl=p.sport==='nhl',confirmed=nhl?state==='Bestätigter Einsatz':state==='Startelf bestätigt';
- if(!nhl&&(!p.h2h?.superiorTeamId||Number(p.teamId)!==Number(p.h2h.superiorTeamId)))return false;
+ if(!nhl&&p.h2h?.superiorTeamId&&Number(p.teamId)!==Number(p.h2h.superiorTeamId))return false;
  if(confirmedOnly&&!confirmed)return false;
  if(p.questionable&&!confirmed)return false;
  if(p.externalExpectedMinutes!=null&&Number(p.externalExpectedMinutes)<50)return false;
