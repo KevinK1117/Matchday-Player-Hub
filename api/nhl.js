@@ -13,10 +13,11 @@ export async function fetchBerlinSchedule(date){
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=1200');
- const count=Math.min(10,Math.max(6,Number.parseInt(req.query.count,10)||8));const date=String(req.query.date||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
+ const count=Math.min(20,Math.max(6,Number.parseInt(req.query.count,10)||8));const date=String(req.query.date||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  try{
   const schedule=await fetchBerlinSchedule(date);const games=(schedule.games||[]).map(g=>({id:g.id, start:g.startTimeUTC, state:g.gameState, away:g.awayTeam?.abbrev,home:g.homeTeam?.abbrev,awayName:value(g.awayTeam?.name)||g.awayTeam?.abbrev,homeName:value(g.homeTeam?.name)||g.homeTeam?.abbrev,awayScore:g.awayTeam?.score,homeScore:g.homeTeam?.score}));
-  const clubs=[...new Set(games.flatMap(g=>[g.home,g.away]))].filter(Boolean);
+  const upcoming=games.filter(g=>['FUT','PRE','SCHEDULED'].includes(g.state));
+  const clubs=[...new Set(upcoming.flatMap(g=>[g.home,g.away]))].filter(Boolean);
   const clubStats=await Promise.allSettled(clubs.map(async club=>({club,data:await fetchJson('/club-stats/'+club+'/now')})));
   const players=[];
   for (let i=0;i<clubStats.length;i++){
@@ -24,7 +25,12 @@ export default async function handler(req,res){
    for(const p of r.value.data.skaters||[]){const gp=Number(p.gamesPlayed)||0,goals=Number(p.goals)||0,shots=p.shots==null?null:Number(p.shots);const ppgoals=p.powerPlayGoals==null?null:Number(p.powerPlayGoals);
     if(gp<1)continue;
     const goalsPerGame=goals/gp, shotsPerGame=shots==null?null:shots/gp;
-    const score=(goalsPerGame*0.58+(shotsPerGame??0)*0.11 + (ppgoals??0)/gp*0.20)*(.62+.38*Math.min(1,gp/12));
+    // Shrink early-season shooting percentage toward a conservative 10% baseline.
+    // This avoids overrating players with a few goals on very few shots.
+    const adjustedRate=shots>0?(goals+0.10*35)/(shots+35):0;
+    const expectedGoalsPerGame=shotsPerGame==null?0:shotsPerGame*Math.min(.20,adjustedRate);
+    const ppRole=ppgoals==null?0:Math.min(.12,ppgoals/Math.max(gp,1)*.20);
+    const score=(expectedGoalsPerGame+ppRole)*Math.min(1,gp/12);
     players.push({photo:p.headshot||null,id:p.playerId,firstName:value(p.firstName),lastName:value(p.lastName),name:[value(p.firstName),value(p.lastName)].filter(Boolean).join(' '),team:club,position:p.positionCode,GP:gp,goals,shots,ppgoals,goalsPerGame,shotsPerGame,score, xg:null,ppToi:null,toi:null});
    }
   }
@@ -40,7 +46,7 @@ export default async function handler(req,res){
       if(team&&gp>0&&Number.isFinite(ga)&&ga>=0)defence.set(team,ga/gp);
     }
     for(const p of players){
-      const game=games.find(g=>g.home===p.team||g.away===p.team);
+      const game=upcoming.find(g=>g.home===p.team||g.away===p.team);
       const opp=game?(game.home===p.team?game.away:game.home):null;
       const goalsAgainst=opp?defence.get(opp):null;
       p.opponentGoalsAgainstPerGame=goalsAgainst??null;
@@ -54,7 +60,7 @@ export default async function handler(req,res){
   }catch{}
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
   // A large parallel fan-out caused NHL API 429. Enrich only selected top-ranked players, sequentially.
-  const shortlist=players.slice(0,Math.min(count,players.length));
+  const shortlist=players.slice(0,Math.min(16,players.length));
   const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
   let stoppedForRateLimit=false;
   for(const p of shortlist){
@@ -79,24 +85,27 @@ export default async function handler(req,res){
       const n=p.last5.length;
       const shots=p.last5Shots==null?null:p.last5Shots/n;
       const goals=p.last5Goals==null?null:p.last5Goals/n;
-      p.score = p.score*0.62 + (shots==null?0:Math.min(7,shots)*0.09) + (goals==null?0:goals*0.17);
-      if(p.toiLast5!=null)p.score += Math.min(25,p.toiLast5/60)*0.006;
-      if(p.ppToiLast5!=null)p.score += Math.min(8,p.ppToiLast5/60)*0.025;
+      // Recent shooting volume matters more than a short-term scoring streak.
+      const recentShotRate=shots==null?null:Math.min(8,shots);
+      const seasonShotRate=p.shotsPerGame??0;
+      if(recentShotRate!=null)p.score*=Math.max(.78,Math.min(1.25,.80+.20*recentShotRate/Math.max(1,seasonShotRate)));
+      if(p.toiLast5!=null)p.score*=Math.max(.75,Math.min(1.12,p.toiLast5/60/18));
+      if(p.ppToiLast5!=null)p.score*=1+Math.min(.12,p.ppToiLast5/60*.025);
+      // Recent goals are supporting evidence, not a dominant ranking driver.
+      if(goals!=null)p.score*=1+Math.min(.08,goals*.04);
     }
   }
   players.sort((a,b)=>b.score-a.score||b.goals-a.goals);
   for(const p of players){
     if(!p.participation)p.participation='Einsatz nicht bestätigt';
-    const match=games.find(g=>g.home===p.team||g.away===p.team);
+    const match=upcoming.find(g=>g.home===p.team||g.away===p.team);
     p.opponent=match?(match.home===p.team?match.away:match.home):null;p.fixtureId=match?.id??null;
   }
-  const eligiblePlayers=req.query.confirmed==='1'?players.filter(p=>p.participation==='Bestätigter Einsatz'):players;
+  const eligiblePlayers=players.filter(p=>p.fixtureId!=null&&p.GP>=10&&p.goals>=3&&p.shotsPerGame>=1.5&&(req.query.confirmed!=='1'||p.participation==='Bestätigter Einsatz'));
 
-  // Diversity is soft: first ensure each game is represented when possible, then fill by rank.
-  const picked=[];const seen=new Set();
-  for(const g of games){const p=eligiblePlayers.find(p=>(p.team===g.home||p.team===g.away)&&!seen.has(p.id));if(p&&picked.length<count){picked.push(p);seen.add(p.id)}}
-  for(const p of eligiblePlayers){if(picked.length>=count)break;if(!seen.has(p.id)){picked.push(p);seen.add(p.id)}}
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Ranking anhand von Saison-Toren/Spiel, Schüssen/Spiel, PP-Toren, Gegner-Defensivwerten und bei verfügbaren Protokollen der letzten fünf Spiele. Keine kalibrierte Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  // Never force a low-ranked scorer solely to represent every fixture.
+  const picked=eligiblePlayers.slice(0,count);
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Ranking mit geglätteter Trefferquote, Schussvolumen, Powerplay, Gegner-Gegentoren und (soweit verfügbar) jüngster Schusszahl sowie Eiszeit. Keine kalibrierte Torwahrscheinlichkeit.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
 
