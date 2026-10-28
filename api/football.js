@@ -69,7 +69,14 @@ while(missingSelection.length<maxTeamLookups&&leagueOrder.some(id=>buckets.get(i
  }
 }
 if(missingSelection.length){
- const extra=await Promise.allSettled(missingSelection.flatMap(({team,league,season})=>cupTeams.has(Number(team))?[78,79,80].map(sourceLeague=>api(`/players?team=${team}&league=${sourceLeague}&season=${season}&page=1`,key).then(rows=>({league:sourceLeague,rows}))):[api(`/players?team=${team}&league=${league}&season=${season}&page=1`,key).then(rows=>({league,rows})))]));
+ const requests=[];
+ for(const {team,league,season} of missingSelection){
+  const sourceLeagues=cupTeams.has(Number(team))?[78,79,80]:[league];
+  for(const sourceLeague of sourceLeagues){
+   requests.push(api('/players?team='+team+'&league='+sourceLeague+'&season='+season+'&page=1',key).then(rows=>({league:sourceLeague,rows})));
+  }
+ }
+ const extra=await Promise.allSettled(requests);
  results.push(...extra);
 }
 // Head-to-head is evaluated only on finished meetings between these exact clubs.
