@@ -10,7 +10,7 @@
 import {isScorerCompetition} from '/public/competitions.js';
 import {rankScorers} from '/public/combo.js';
 const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const today=()=>{const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const v=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`};
 const time=v=>new Date(v).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}),fmt=v=>v==null?'–':esc(v);
 const leagueList=[[0,'🌍','Alle ausgewählten Wettbewerbe'],[78,'🇩🇪','Bundesliga'],[79,'🇩🇪','2. Bundesliga'],[135,'🇮🇹','Serie A'],[39,'🏴','Premier League · England'],[61,'🇫🇷','Ligue 1'],[140,'🇪🇸','La Liga'],[307,'🇸🇦','Saudi Pro League'],[2,'🏆','UEFA Champions League'],[3,'🏆','UEFA Europa League'],[1,'🌎','Weltmeisterschaft'],[4,'🇪🇺','Europameisterschaft'],[5,'🇪🇺','UEFA Nations League'],[88,'🇳🇱','Eredivisie'],[94,'🇵🇹','Liga Portugal']];
 let fixtureState={configured:false,updatedAt:null};let leagueCatalog=[],catalogLoaded=false;let scorerToken=0;let sport='football';let games=[],demoMode=false,league=0,filter='all',view='home',onlyFav=false,request=0,detail=null,tab='stats',modalToken=0,backFocus=null,comboToken=0;
@@ -19,7 +19,8 @@ const live=g=>['1H','HT','2H','ET','BT','P','INT','LIVE'].includes(g.fixture.sta
 const portrait=(id,nhl=false,photo=null,team=null,season=null)=>{const safePhoto=typeof photo==='string'&&/^https:\/\/(assets.nhle.com|media.api-sports.io)\//.test(photo)?photo:null;const year=Number(season)||Number($('date')?.value?.slice(0,4))||new Date().getFullYear(),club=String(team||'').toUpperCase();const url=safePhoto||(nhl&&/^[A-Z]{3}$/.test(club)?`https://assets.nhle.com/mugs/nhl/${year}${year+1}/${club}/${encodeURIComponent(id)}.png`:nhl?`https://assets.nhle.com/mugs/nhl/latest/${encodeURIComponent(id)}.png`:`https://media.api-sports.io/football/players/${encodeURIComponent(id)}.png`);return `<span class="avatar"><img src="${esc(url)}" alt="Spielerfoto" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='/public/player-placeholder.svg';this.alt='Spielerfoto nicht verfügbar'"></span>`};
 const crest=t=>`<span class="crest">${t.logo&&/^https:\/\/(media.api-sports.io|assets.nhle.com)\//.test(t.logo)?`<img src="${esc(t.logo)}" alt="" loading="lazy">`:esc(t.name.slice(0,2).toUpperCase())}</span>`;
 function form(s){return `<span class="form">${String(s||'').slice(-5).split('').map(x=>`<i class="${esc(x)}">${({W:'S',D:'U',L:'N'})[x]||'–'}</i>`).join('')}</span>`}
-async function get(q,sourceSport=sport){const r=await fetch((sourceSport==='nhl'?'/api/nhlcenter?':'/api/matchcenter?')+new URLSearchParams(q),{signal:AbortSignal.timeout(25000)}),d=await r.json();if(!r.ok||d.error)throw Error(d.error||'Datenabruf fehlgeschlagen');return d}
+function requestTimeout(ms){if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'){try{return AbortSignal.timeout(ms)}catch(e){console.warn('AbortSignal.timeout nicht verfügbar:',e)}}return undefined}
+async function get(q,sourceSport=sport){const r=await fetch((sourceSport==='nhl'?'/api/nhlcenter?':'/api/matchcenter?')+new URLSearchParams(q),{signal:requestTimeout(25000)}),d=await r.json();if(!r.ok||d.error)throw Error(d.error||'Datenabruf fehlgeschlagen');return d}
 function footballLeagueOptions(){
  const fixed=[...leagueList],seen=new Set(fixed.map(x=>x[0])),discovered=[];
  // Use the API's real league IDs, rather than guessed IDs for the Nordic second tiers.
@@ -197,7 +198,7 @@ async function generate(){
   if(demoMode){players=input.filter(g=>g.fixture.status.short==='NS').flatMap((g,i)=>Array.from({length:4},(_,j)=>({id:10001+i*4+j,name:'Demo-Spieler '+(i*4+j+1),fixtureId:g.fixture.id,team:g.teams.home.name,goals:6+i,minutes:800,minutesPerGame:80,shotsPerGame:1.6,participation:'Einsatz nicht bestätigt',sport:currentSport,GP:20,ppgoals:3})));}
   else{
    const query=new URLSearchParams({date:$('date').value,sport:currentSport,count:String(count)});
-   const cached=homeCache.get(homeKey());if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?':'/api/football?')+query,{signal:AbortSignal.timeout(60000)}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
+   const cached=homeCache.get(homeKey());if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?':'/api/football?')+query,{signal:requestTimeout(60000)}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
   }
   if(token!==comboToken)return;
   let selection=rankScorers(input,players,count,Date.now(),confirmed);
@@ -208,7 +209,7 @@ async function generate(){
        .map(x=>[x.player.id,x.player.teamId,x.game.league.id,x.game.league.season].join(':'));
       if(samples.length){
         const u='/api/scorer-trends?'+new URLSearchParams({date:$('date').value,players:[...new Set(samples)].join(',')});
-        const response=await fetch(u,{signal:AbortSignal.timeout(18000)});
+        const response=await fetch(u,{signal:requestTimeout(18000)});
         if(response.ok){
           const trends=await response.json();
           if(token!==comboToken)return;
@@ -288,7 +289,7 @@ $('backtestRun').onclick=async()=>{
  button.disabled=true;result.innerHTML='<p class="loading">Vergangene Spieltage werden ausgewertet …</p>';
  try{
   const qs=new URLSearchParams({league:$('backtestLeague').value,days:$('backtestDays').value});
-  const response=await fetch('/api/backtest?'+qs,{signal:AbortSignal.timeout(45000)});
+  const response=await fetch('/api/backtest?'+qs,{signal:requestTimeout(45000)});
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||data.error||'Historische Daten nicht verfügbar');
   renderBacktest(data);
@@ -316,7 +317,7 @@ $('drawGenerate').onclick=async()=>{
  b.disabled=true;out.textContent='Spiele und Datenqualität werden geprüft …';
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}
-  const r=await fetch('/api/draws?'+new URLSearchParams({date,count:String(count)}),{signal:AbortSignal.timeout(60000)}),d=await r.json();
+  const r=await fetch('/api/draws?'+new URLSearchParams({date,count:String(count)}),{signal:requestTimeout(60000)}),d=await r.json();
   if(token!==drawToken)return;
   if(!r.ok)throw Error(d.error||'Analyse fehlgeschlagen');
   const all=d.candidates||[],verified=(d.verifiedCandidates||all.filter(x=>x.dataQuality!=='Vorläufig – nicht unabhängig bestätigt')).slice(0,count),provisional=(d.provisionalCandidates||all.filter(x=>x.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).slice(0,Math.max(0,count-verified.length));
@@ -364,7 +365,7 @@ function scorerChance(p,nhl){
 function homePlayerCard(row,i,sp=sport){const p=row.player,g=row.game,nhl=sp==='nhl',season=row.season||g?.league?.season||leagueSeason(league||78),key=playerKey(p,sp),goalRate=nhl&&p.GP>0&&p.goals!=null?p.goals/p.GP:!nhl&&p.minutes>0&&p.goals!=null?p.goals*90/p.minutes:null,probability=scorerChance(p,nhl),hasProbability=probability!=null,badge=hasProbability?probability.toFixed(1)+' %':'– %',badgeLabel=hasProbability?'Poisson · unkalibriert':'Daten fehlen';const timeValue=nhl?(p.toiLast5!=null?(p.toiLast5/60).toFixed(1):p.GP):p.minutesPerGame!=null?Number(p.minutesPerGame).toFixed(0):null,timeLabel=nhl?(p.toiLast5!=null?'Ø Eiszeit · Min.':'Einsätze'):'Ø Minuten';homeProfiles.set(key,{...row,sport:sp,season});return `<article class="home-player-card"><div class="home-player-top"><span class="rank-number">${i+1}</span><button class="home-profile" data-player="${p.id}" data-season="${season}" data-player-sport="${sp}">${portrait(p.id,nhl,p.photo||p.headshot,p.team,season)}<span><strong>${esc(p.name)}</strong><small>${esc(p.team||'')} · ${esc(g?.league?.name||row.leagueName||'Liga')}</small><small>${g?esc(p.opponent||g.teams.away.name)+' · '+time(g.fixture.date)+' Uhr':'Saisonstatistiken'}</small></span></button><div class="goal-badge"><strong>${fmt(badge)}</strong><span>${esc(badgeLabel)}</span></div></div><div class="home-player-metrics"><div><span>Schüsse Saison</span><b>${fmt(p.shots??p.totalShots)}</b></div><div><span>Tore letzte 5</span><b>${fmt(p.last5Goals)}</b></div><div><span>${timeLabel}</span><b>${fmt(timeValue)}</b></div></div><div class="home-player-foot"><span>${esc(p.participation||'Aufstellung noch nicht bestätigt')} · ${row.seasonal?'Liga-Topscorer':'Statistik-Ranking'}</span><button class="save-player ${favoritePlayers.has(key)?'saved':''}" data-save-player="${esc(key)}" aria-label="${favoritePlayers.has(key)?'Favorit entfernen':'Spieler merken'}: ${esc(p.name)}" aria-pressed="${favoritePlayers.has(key)}">☆</button></div></article>`}
 async function renderHome(){const token=++homeToken,key=homeKey();dashboard();if(homeCache.has(key)){paintHome(homeCache.get(key));return}$('homePlayers').innerHTML='<div class="loading">Spielerstatistiken werden geladen …</div>';try{const selectedGames=games.filter(g=>!league||g.league.id===league),upcoming=selectedGames.some(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>Date.now()+300000);let result;
  if(demoMode){const p={id:10001,name:'Demo-Torschütze',team:'Demo-Team',sport,goals:8,GP:12,shots:40,shotsPerGame:3.3,minutes:850,minutesPerGame:77,participation:'Demo · Einsatz nicht bestätigt'};result={rows:[{player:p,game:selectedGames[0]}],evaluated:1,seasonal:false}}
- else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?':'/api/football?')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{signal:AbortSignal.timeout(60000)});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){console.warn('Spieltag-Scorer-Abruf fehlgeschlagen, Saison-Fallback:',apiError);result=await seasonHome();if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result);return;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length)result=await seasonHome()}
+ else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?':'/api/football?')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{signal:requestTimeout(60000)});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){console.warn('Spieltag-Scorer-Abruf fehlgeschlagen, Saison-Fallback:',apiError);result=await seasonHome();if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result);return;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length)result=await seasonHome()}
  else result=await seasonHome();
  if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result)
  }catch(e){if(token!==homeToken||view!=='home')return;dashboard({error:true});$('homeSubtitle').textContent='Spielerstatistiken derzeit eingeschränkt';$('homePlayers').innerHTML=`<div class="empty card"><strong>Analyse konnte nicht geladen werden</strong>${esc(e.message)}<br><button class="secondary" id="retryHome">Erneut laden</button></div>`}}
