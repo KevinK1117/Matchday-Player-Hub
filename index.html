@@ -212,9 +212,9 @@ async function liveCombo(force=false){
    const period=String(g.fixture?.status?.short||'').toUpperCase();
    let tip=null,reason='';
    if(kind==='football'){
-    if(valid&&Number.isFinite(elapsed)&&elapsed>=75&&elapsed<=88){
-     tip='Spätes Tor ab jetzt (mindestens 1 weiteres Tor)';
-     reason='Schlussphase ab der 75. Minute; heuristischer Hinweis, kein gesicherter Treffer';
+    if(valid&&Number.isFinite(elapsed)&&elapsed>=80&&elapsed<=88){
+     tip='Weiteres Tor ab der 80. Minute';
+     reason='Schlussphase ab der 80. Minute; heuristischer Hinweis, kein gesicherter Treffer';
     }else reason='Kein passendes Signal für ein spätes Tor in der Schlussphase';
    }else{
     if(valid&&['3','P3','3RD'].includes(period)){
@@ -226,7 +226,7 @@ async function liveCombo(force=false){
   }).sort((a,b)=>b.strength-a.strength||Number(b.valid)-Number(a.valid));
   const selected=ranked.filter(x=>x.tip).slice(0,count);
   $('liveMeta').textContent=(kind==='nhl'?'NHL':'API-Sports')+' · Datenabruf '+new Date().toLocaleTimeString('de-DE')+' · '+active.length+' laufende Spiele · '+selected.filter(x=>x.tip).length+' Hinweise';
-  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong><p>'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</p><div class="live-combo-tip">'+esc(x.tip)+'</div><p>'+esc(x.reason)+'</p><small>Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine Live-Signale für späte Tore verfügbar. Es werden keine Tipps erfunden.</p>';
+  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong><p>'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</p><div class="live-combo-tip">'+esc(x.tip)+'</div><div class="live-combo-score">Live: '+esc(x.g.goals?.home!=null&&x.g.goals?.away!=null?x.g.goals.home+' : '+x.g.goals.away:'Spielstand nicht verfügbar')+'</div><p>'+esc(x.reason)+'</p><a href="https://www.bet365.de/hub/de-de/football" target="_blank" rel="noopener noreferrer">Bei bet365 Spiel suchen ↗</a><small>Kein verifizierter Direktlink zum Einzelspiel · Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine Live-Signale für späte Tore verfügbar. Es werden keine Tipps erfunden.</p>';
  }catch(e){$('liveMeta').textContent='Live-Abfrage fehlgeschlagen';$('liveResult').innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
  finally{liveBusy=false}
 }
