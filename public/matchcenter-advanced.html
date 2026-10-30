@@ -212,22 +212,21 @@ async function liveCombo(force=false){
    const period=String(g.fixture?.status?.short||'').toUpperCase();
    let tip=null,reason='';
    if(kind==='football'){
-    if(!valid){reason='Spielstand nicht verfügbar';}
-    else if(diff===0&&Number.isFinite(elapsed)&&elapsed>=65&&elapsed<=85){tip='Unentschieden (Remis)';reason='Späte Spielphase und aktuell ausgeglichene Partie';}
-    else if(Math.abs(diff)===1&&Number.isFinite(elapsed)&&elapsed>=75&&elapsed<=88){tip='Doppelte Chance: führendes Team oder Remis';reason='Knappes Ergebnis in der Schlussphase; Ausgleich bleibt möglich';}
-    else if(Math.abs(diff)>=2&&Number.isFinite(elapsed)&&elapsed>=60){tip='Doppelte Chance: führendes Team oder Remis';reason='Deutlicher Vorsprung in fortgeschrittener Spielphase';}
-    else reason='Noch kein ausreichend klares Live-Signal für einen belastbaren Tipp';
+    if(valid&&Number.isFinite(elapsed)&&elapsed>=75&&elapsed<=88){
+     tip='Spätes Tor ab jetzt (mindestens 1 weiteres Tor)';
+     reason='Schlussphase ab der 75. Minute; heuristischer Hinweis, kein gesicherter Treffer';
+    }else reason='Kein passendes Signal für ein spätes Tor in der Schlussphase';
    }else{
-    if(!valid)reason='Spielstand nicht verfügbar';
-    else if(Math.abs(diff)>=2&&['3','P3','3RD'].includes(period)){tip='Sieger inklusive Verlängerung: führendes Team';reason='Mehr-Tore-Führung im dritten Drittel; kein sicherer Endstand';}
-    else if(Math.abs(diff)===1&&['3','P3','3RD'].includes(period)){tip='Sieger inklusive Verlängerung: führendes Team';reason='Knappes Live-Signal im dritten Drittel; hohes Ausgleichsrisiko';}
-    else reason='Kein ausreichend klares Live-Signal; NHL-Verlängerung bleibt möglich';
+    if(valid&&['3','P3','3RD'].includes(period)){
+     tip='Spätes Tor im 3. Drittel (mindestens 1 weiteres Tor)';
+     reason='Laufendes Schlussdrittel; heuristischer Hinweis, kein gesicherter Treffer';
+    }else reason='Kein passendes Signal für ein spätes Tor im Schlussdrittel';
    }
    return {g,tip,reason,valid,strength:tip?(Math.abs(diff)>=2?2:1):0};
   }).sort((a,b)=>b.strength-a.strength||Number(b.valid)-Number(a.valid));
   const selected=ranked.slice(0,count);
   $('liveMeta').textContent=(kind==='nhl'?'NHL':'API-Sports')+' · Datenabruf '+new Date().toLocaleTimeString('de-DE')+' · '+active.length+' laufende Spiele · '+selected.filter(x=>x.tip).length+' Hinweise';
-  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong><p>'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</p><div class="live-combo-tip">'+esc(x.tip||'Kein Tipp')+'</div><p>'+esc(x.reason)+'</p><small>Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine ausreichend begründeten Live-Tipps verfügbar. Es werden keine Tipps erfunden.</p>';
+  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong><p>'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</p><div class="live-combo-tip">'+esc(x.tip||'Kein Tipp')+'</div><p>'+esc(x.reason)+'</p><small>Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine Live-Signale für späte Tore verfügbar. Es werden keine Tipps erfunden.</p>';
  }catch(e){$('liveMeta').textContent='Live-Abfrage fehlgeschlagen';$('liveResult').innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
  finally{liveBusy=false}
 }
