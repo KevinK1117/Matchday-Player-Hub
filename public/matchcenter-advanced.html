@@ -251,15 +251,22 @@ async function liveCombo(force=false){
    }
    return {g,tip,reason,valid,strength:tip?(Math.abs(diff)>=2?2:1):0};
   }).sort((a,b)=>b.strength-a.strength||Number(b.valid)-Number(a.valid));
-  const candidates=ranked.filter(x=>x.tip).slice(0,Math.min(count,12));
+  const candidates=ranked.filter(x=>x.tip).slice(0,Math.min(Math.max(count*2,10),24));
   const selected=await Promise.all(candidates.map(async x=>{
    if(kind!=='football')return {...x,analysis:null};
    try{const d=await get({action:'detail',id:x.g.fixture.id},kind);return {...x,analysis:liveAnalysis(d.data)}}
    catch{return {...x,analysis:liveAnalysis(null)}}
   }));
-  selected.sort((a,b)=>(b.analysis?.quality||0)-(a.analysis?.quality||0)||Number(!!b.analysis?.pressure)-Number(!!a.analysis?.pressure));
+  selected.forEach(x=>{
+   const minute=Number(x.g.fixture?.status?.elapsed),total=Number(x.g.goals?.home)+Number(x.g.goals?.away);
+   const a=x.analysis;
+   x.rank=(a?.quality||0)*2+(a?.pressure?3:0)+(total<=2?2:0)+(minute>=80?1:0);
+   x.signal=a?.quality>=2&&a?.pressure?'Statistisch gestützter Hinweis':a?.quality>=1?'Beobachtung – weitere Bestätigung nötig':'Unbestätigter Hinweis';
+  });
+  selected.sort((a,b)=>b.rank-a.rank);
+  selected.splice(count);
   $('liveMeta').textContent=(kind==='nhl'?'NHL':'API-Sports')+' · Datenabruf '+new Date().toLocaleTimeString('de-DE')+' · '+active.length+' laufende Spiele · '+selected.filter(x=>x.tip).length+' Hinweise';
-  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong>'+tipCompetition(x.g.league)+'<div class="tip-match">'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</div><div class="live-combo-tip">'+esc(x.tip||'Kein Tipp')+'</div><div class="tip-live-minute">⏱ '+esc(x.g.fixture?.status?.elapsed!=null?x.g.fixture.status.elapsed+'. Minute':x.g.fixture?.status?.long||'Spielminute unbekannt')+'</div><div class="live-combo-score">Live: '+esc(x.g.goals?.home!=null&&x.g.goals?.away!=null?x.g.goals.home+' : '+x.g.goals.away:'Spielstand nicht verfügbar')+'</div>'+(x.analysis?'<div class="live-evidence"><strong>📊 '+esc(x.analysis.label)+'</strong><span>'+esc(x.analysis.reason)+'</span></div>':'')+'<p>'+esc(x.reason)+'</p>'+bet365FixtureLink(x.g.teams.home.name+' '+x.g.teams.away.name)+'<small>Kein verifizierter Direktlink zum Einzelspiel · Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine passenden Live-Torsignale verfügbar. Es werden keine Tipps erfunden.</p>';
+  $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map(x=>'<article class="live-combo-item"><strong>● LIVE-ANALYSE</strong>'+tipCompetition(x.g.league)+'<div class="tip-match">'+esc(x.g.teams.home.name)+' – '+esc(x.g.teams.away.name)+'</div><div class="live-combo-tip">'+esc(x.tip||'Kein Tipp')+'</div><div class="tip-live-minute">⏱ '+esc(x.g.fixture?.status?.elapsed!=null?x.g.fixture.status.elapsed+'. Minute':x.g.fixture?.status?.long||'Spielminute unbekannt')+'</div><div class="live-combo-score">Live: '+esc(x.g.goals?.home!=null&&x.g.goals?.away!=null?x.g.goals.home+' : '+x.g.goals.away:'Spielstand nicht verfügbar')+'</div>'+(x.analysis?'<div class="live-evidence"><strong>📊 '+esc(x.signal)+' · '+esc(x.analysis.label)+'</strong><span>'+esc(x.analysis.reason)+'</span></div>':'')+'<p>'+esc(x.reason)+'</p><p class="live-odds-note">Live-Quote: nicht verfügbar · Wunschfilter ab 3,00 erst mit verifizierter Quotenquelle möglich.</p>'+bet365FixtureLink(x.g.teams.home.name+' '+x.g.teams.away.name)+'<small>Kein verifizierter Direktlink zum Einzelspiel · Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</small></article>').join('')+'</div>':'<p class="result-status">Keine passenden Live-Torsignale verfügbar. Es werden keine Tipps erfunden.</p>';
  }catch(e){$('liveMeta').textContent='Live-Abfrage fehlgeschlagen';$('liveResult').innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
  finally{liveBusy=false}
 }
