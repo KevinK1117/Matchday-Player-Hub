@@ -21,15 +21,24 @@ export default async function handler(req,res){
    }
   }catch(e){errors.push(sport+': '+e.message)}
  }
- let sent=0;
+ let sent=0,failed=0;
  for(const signal of signals){
-  const locked=await redis('SET','matchday:push:signal:'+date+':'+signal.id,'1','EX',172800,'NX');
-  if(locked!=='OK')continue;
   for(const key of keys){
+   const deliveredKey='matchday:push:delivered:'+date+':'+signal.id+':'+key;
+   if(await redis('EXISTS',deliveredKey))continue;
    const raw=await redis('GET',key);if(!raw)continue;
-   try{await sendPush(JSON.parse(raw),{...signal,tag:signal.id});sent++}
-   catch(e){if([404,410].includes(e.statusCode)){await redis('DEL',key);await redis('SREM','matchday:push:keys',key)}}
+   try{
+    await sendPush(JSON.parse(raw),{...signal,tag:signal.id});
+    await redis('SET',deliveredKey,'1','EX',172800);
+    sent++;
+   }catch(e){
+    failed++;
+    if([404,410].includes(e.statusCode)){
+     await redis('DEL',key);
+     await redis('SREM','matchday:push:keys',key);
+    }
+   }
   }
  }
- return res.status(200).json({signals:signals.length,sent,errors});
+ return res.status(200).json({signals:signals.length,sent,failed,errors});
 }
