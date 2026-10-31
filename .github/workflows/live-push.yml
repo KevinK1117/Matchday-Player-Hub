@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      send_test_push:
+        description: 'Testnachricht an angemeldete Geräte senden'
+        type: boolean
+        default: false
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -12,4 +17,4 @@ jobs:
           CRON_SECRET: ${{ secrets.MATCHDAY_CRON_SECRET }}
         run: |
           test -n "$CRON_SECRET" || { echo "MATCHDAY_CRON_SECRET not configured"; exit 1; }
-          curl --fail --retry 2 --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "https://matchday-player-hub.vercel.app/api/push-check"
+          curl --fail --retry 2 --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "https://matchday-player-hub.vercel.app/api/push-check${{ inputs.send_test_push && '?test=1' || '' }}"
