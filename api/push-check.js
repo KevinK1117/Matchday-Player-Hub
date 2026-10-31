@@ -7,7 +7,13 @@ export default async function handler(req,res){
  if(!configurePush())return res.status(503).json({error:'VAPID fehlt'});
  const origin='https://matchday-player-hub.vercel.app',date=berlinDate(),signals=[],errors=[];
  let keys;try{keys=await redis('SMEMBERS','matchday:push:keys')||[]}catch(e){return res.status(503).json({error:'Push-Speicher nicht verfügbar'})}
- if(!keys.length)return res.status(200).json({signals:0,sent:0,notice:'Noch keine Push-Abonnenten'});
+ if(!keys.length)return res.status(200).json({signals:0,sent:0,subscribers:0,notice:'Noch keine Push-Abonnenten'});
+ if(req.query?.test==='1'){
+  let sent=0,failed=0;const details=[];
+  for(const key of keys){try{const raw=await redis('GET',key);if(!raw)continue;await sendPush(JSON.parse(raw),{title:'Matchday PRO · Push-Test',body:'Testnachricht vom Matchday-Server',url:origin+'/matchcenter',tag:'matchday-push-test'});sent++}catch(e){failed++;details.push({status:e.statusCode||null,message:String(e.message||e).slice(0,130)})}}
+  return res.status(200).json({test:true,subscribers:keys.length,sent,failed,details});
+ }
+
  for(const [sport,path] of [['football','matchcenter'],['nhl','nhlcenter']]){
   try{
    for(const g of await fixtures(origin+'/api/'+path,date)){
@@ -40,5 +46,5 @@ export default async function handler(req,res){
    }
   }
  }
- return res.status(200).json({signals:signals.length,sent,failed,errors});
+ return res.status(200).json({signals:signals.length,subscribers:keys.length,sent,failed,errors});
 }
