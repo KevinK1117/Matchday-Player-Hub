@@ -52,10 +52,6 @@
     {
       "path": "/api/warm",
       "schedule": "15 5 * * *"
-    },
-    {
-      "path": "/api/push-check",
-      "schedule": "*/5 * * * *"
     }
   ]
 }
