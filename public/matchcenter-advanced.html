@@ -223,8 +223,8 @@ async function liveCombo(force=false){
    if(kind==='football'){
     if(valid&&Number.isFinite(elapsed)&&((elapsed>=40&&elapsed<=45)||(elapsed>=80&&elapsed<=88))){
      const total=Number(h)+Number(a);
-     tip='Über '+total+',5 Tore';
-     reason=(elapsed>=80?'Späte Tor-Chance ab der 80. Minute':'Tor-Chance ab der 40. Minute')+' · Aktueller Spielstand '+h+':'+a+'; für diesen Tipp ist mindestens ein weiteres Tor nötig. Heuristische Live-Einschätzung, keine Gewinnzusage';
+     tip='Über '+total+',5 Tore'+(elapsed<80?' – 1. Halbzeit':' – Gesamtspiel');
+     reason=(elapsed>=80?'Späte Tor-Chance ab der 80. Minute':'Tor-Chance vor der Halbzeitpause')+' · Aktueller Spielstand '+h+':'+a+'; für diesen Tipp ist mindestens ein weiteres Tor '+(elapsed<80?'vor der Halbzeit':'im Spiel')+' nötig. Heuristische Live-Einschätzung, keine Gewinnzusage';
     }else reason='Kein Live-Torsignal im Zeitfenster 40.–45. oder 80.–88. Minute';
    }else{
     if(valid&&['3','P3','3RD'].includes(period)){
