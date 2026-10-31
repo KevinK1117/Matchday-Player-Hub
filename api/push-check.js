@@ -20,10 +20,10 @@ export default async function handler(req,res){
     const status=String(g.fixture?.status?.short||'').toUpperCase(),home=g.teams?.home?.name,away=g.teams?.away?.name,score=g.goals,id=g.fixture?.id;
     if(!id||!home||!away||score?.home==null||score?.away==null)continue;
     let signal=false,label='';
-    if(sport==='football'){const minute=Number(g.fixture?.status?.elapsed);signal=(status==='1H'&&minute>=40&&minute<=45)||(status==='2H'&&minute>=80&&minute<=88);label=(minute>=80?'Spätes Tor':'Weiteres Tor')+' · '+minute+'. Minute · Über '+(Number(score.home)+Number(score.away))+',5 Tore'+(minute<80?' 1. HZ':' Gesamtspiel')}
+    if(sport==='football'){const minute=Number(g.fixture?.status?.elapsed);signal=Number.isFinite(minute)&&((minute>=40&&minute<=45&&['1H','LIVE','IN'].includes(status))||(minute>=80&&minute<=88&&['2H','LIVE','IN'].includes(status)));label=(minute>=80?'Spätes Tor':'Weiteres Tor')+' · '+minute+'. Minute · Über '+(Number(score.home)+Number(score.away))+',5 Tore'+(minute<80?' 1. HZ':' Gesamtspiel')}
     else if(status==='LIVE'){const period=await nhlPeriod(id).catch(()=>0);signal=period===3;label='Spätes Tor · 3. Drittel · Über '+(Number(score.home)+Number(score.away))+',5 Tore'}
     if(!signal)continue;
-    signals.push({id:sport+':'+id,title:'Matchday PRO · Live-Tipp',body:home+' – '+away+' · '+score.home+':'+score.away+' · '+label,url:origin+'/matchcenter'});
+    signals.push({id:sport+':'+id+':'+(sport==='football'?(Number(g.fixture?.status?.elapsed)<80?'first-half':'late-game'):'third-period'),title:'Matchday PRO · Live-Tipp',body:home+' – '+away+' · '+score.home+':'+score.away+' · '+label,url:origin+'/matchcenter'});
    }
   }catch(e){errors.push(sport+': '+e.message)}
  }
