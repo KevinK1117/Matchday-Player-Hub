@@ -9,17 +9,17 @@ async function api(path,key){
  const data=body.response||[];
  // Official XIs may appear shortly before kickoff; do not serve a five-minute-old
  // empty lineup from the server cache during the pre-match window.
- const ttl=path.startsWith('/fixtures/lineups?')?20000:path.startsWith('/fixtures?id=')?20000:path.startsWith('/fixtures?date')?30000:300000;
+ const ttl=path.startsWith('/odds/live?')?15000:path.startsWith('/fixtures/lineups?')?20000:path.startsWith('/fixtures?id=')?20000:path.startsWith('/fixtures?date')?30000:300000;
  cache.set(path,{until:Date.now()+ttl,data});if(cache.size>200)cache.delete(cache.keys().next().value);return data;
 }
 const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
  res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
- if(!['fixtures','detail','table','player','squad','scorers','leagues','lineups'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','detail','table','player','squad','scorers','leagues','lineups','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['detail','lineups','player','squad'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['detail','lineups','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  const key=process.env.API_SPORTS_KEY;
@@ -77,6 +77,24 @@ export default async function handler(req,res){
   const rows=await api('/fixtures/lineups?fixture='+q.id,key);
   const perTeam=rows.map(side=>({teamId:side.team?.id,confirmed:(side.startXI||[]).length===11}));
   data={fixtureId:fixture.fixture.id,lineups:rows,teams:perTeam,fullyConfirmed:perTeam.length>=2&&perTeam.filter(x=>x.confirmed).length>=2,source:'API-Sports: offiziell gelistete Startelf',checkedAt:new Date().toISOString()};
+ }
+ if(action==='liveodds'){
+  const rows=await api('/odds/live?fixture='+q.id,key);
+  const first=rows.find(row=>Number(row.fixture?.id)===Number(q.id));
+  const offers=[];
+  if(first&&!first.status?.blocked&&!first.status?.stopped&&!first.status?.finished){
+   for(const bet of first.odds||[]){
+    const name=String(bet.name||'');
+    if(!/over.?under|total goals|goals over|goal line/i.test(name))continue;
+    for(const value of bet.values||[]){
+     if(value.suspended||!/^over$/i.test(String(value.value||'')))continue;
+     const line=Number(value.handicap),odd=Number(value.odd);
+     if(!Number.isFinite(line)||!Number.isFinite(odd)||odd<=1)continue;
+     offers.push({market:name,line,odd,main:value.main===true});
+    }
+   }
+  }
+  data={fixtureId:Number(q.id),updatedAt:first?.update||null,blocked:!!first?.status?.blocked,available:!!first,offers};
  }
  if(action==='detail'){
  const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isScorerCompetition(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
