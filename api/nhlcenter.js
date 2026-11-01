@@ -3,11 +3,22 @@ const ended=g=>['FINAL','OFF'].includes(g.gameState);
 export function normalizeGame(g){const team=t=>({id:t?.id,name:value(t?.placeName)&&value(t?.commonName)?value(t.placeName)+' '+value(t.commonName):value(t?.name)||t?.abbrev||'Team',logo:t?.abbrev?`https://assets.nhle.com/logos/nhl/svg/${t.abbrev}_light.svg`:null,abbrev:t?.abbrev});return {fixture:{id:g.id,date:g.startTimeUTC,status:{short:ended(g)?'FT':['LIVE','CRIT'].includes(g.gameState)?'LIVE':['FUT','PRE'].includes(g.gameState)?'NS':g.gameState,elapsed:null},venue:{name:value(g.venue)}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:Number(String(g.season||'').slice(0,4))||new Date(g.startTimeUTC).getUTCFullYear()},teams:{home:team(g.homeTeam),away:team(g.awayTeam)},goals:{home:g.homeTeam?.score??null,away:g.awayTeam?.score??null},sport:'nhl'};}
 export default async function handler(req,res){
  res.setHeader('Cache-Control',String(req.query?.action||'')==='lineups'?'no-store, max-age=0':'s-maxage=60, stale-while-revalidate=60');const q=req.query||{},a=q.action||'fixtures';
- if(!['fixtures','detail','table','player','squad','scorers','lineups'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
- if(a==='fixtures'&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
+ if(!['fixtures','detail','table','player','squad','scorers','lineups','del'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
+ if(['fixtures','del'].includes(a)&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
  if(['detail','lineups','player'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
  if(a==='squad'&&!/^[A-Z]{3}$/.test(String(q.team||'')))return res.status(400).json({error:'Ungültiges NHL-Team'});
  try{let data;
+ if(a==='del'){
+  const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
+  if(!key)return res.status(200).json({configured:false,games:[],notice:'API-Hockey-Zugang fehlt'});
+  const root='https://v1.hockey.api-sports.io';
+  const call=async path=>{const response=await fetch(root+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Hockey HTTP '+response.status);const body=await response.json();if(body.errors&&Object.keys(body.errors).length)throw Error('Hockey API nicht freigeschaltet');return body.response||[]};
+  const leagues=await call('/leagues?search=DEL');
+  const league=leagues.find(l=>/^DEL$/i.test(String(l.name||'')));
+  if(!league)return res.status(200).json({configured:true,games:[],notice:'DEL-Liga nicht gefunden'});
+  const games=await call('/games?date='+q.date+'&league='+league.id);
+  return res.status(200).json({configured:true,games:games.map(g=>({id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS'})),source:'API-Hockey'});
+ }
  if(a==='fixtures'){data=(await fetchBerlinSchedule(String(q.date))).games.map(normalizeGame)}
  if(a==='table'){const rows=await fetchJson('/standings/now');data=rows.standings||[]}
  if(a==='squad'){
