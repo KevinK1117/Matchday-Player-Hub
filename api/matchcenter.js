@@ -26,16 +26,17 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
  if(action==='openliga')return openliga(req,res);
- if(!['fixtures','detail','table','player','squad','scorers','leagues','lineups','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['detail','lineups','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['clock','detail','lineups','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
  let data;
+ if(action==='clock'){data=(await api('/fixtures?id='+q.id,key))[0];if(!data||!isScorerCompetition(data.league))return res.status(404).json({error:'Spiel nicht gefunden'});}
  if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isScorerCompetition({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
  if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isScorerCompetition(g.league));
  if(['table','scorers'].includes(action)){
