@@ -64,7 +64,7 @@ async function enrichCandidates(candidates,key,date){
  let injuries=[],injuriesAvailable=false;
  try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
  // Evaluate independent corroboration for signals from every represented league.
- const limited=candidates.slice(0,Math.min(8,candidates.length));
+ const limited=candidates.slice(0,Math.min(20,candidates.length));
  const enriched=await Promise.all(limited.map(async pick=>{
   let model=null,modelSource=null,modelError=null;
   try{
@@ -207,7 +207,7 @@ async function evaluate(g,key,date,independent){
   // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
   // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
   return {...p,score:Math.max(0,Math.min(88,p.score)),independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
- }).sort((x,y)=>y.score-x.score).slice(0,1)};
+ }).sort((x,y)=>y.score-x.score)};
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');
@@ -275,7 +275,7 @@ export default async function handler(req,res){
   }
   diagnostics.errorReasons=[...errorGroups].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>({reason,count}));
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
-  const evidence=providerCooldownUntil>Date.now()?{candidates:preliminary.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable:false,qualityFlags:['Anbieterpause: Zusatzprüfung ausgesetzt'],evidenceSources:['API-Sports: Tabelle/Form'],modelError:'Anbieterpause'})).slice(0,8),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
+  const evidence=providerCooldownUntil>Date.now()?{candidates:preliminary.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable:false,qualityFlags:['Anbieterpause: Zusatzprüfung ausgesetzt'],evidenceSources:['API-Sports: Tabelle/Form'],modelError:'Anbieterpause'})).slice(0,20),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
   // high-scoring provisional entries crowd out verified signals from the list.
   const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
