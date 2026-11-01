@@ -1,3 +1,4 @@
+import openliga from '../lib/openliga.js';
 import {isScorerCompetition} from '../public/competitions.js';
 const cache = new Map();
 const ROOT = 'https://v3.football.api-sports.io';
@@ -16,6 +17,7 @@ const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
  res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
+ if(action==='openliga')return openliga(req,res);
  if(!['fixtures','detail','table','player','squad','scorers','leagues','lineups','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});

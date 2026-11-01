@@ -1,4 +1,3 @@
-import openliga from './api/openliga.js';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -9,7 +8,7 @@ import form from './api/form.js';
 import draws from './api/draws.js';
 import matchcenter from './api/matchcenter.js';
 import nhlcenter from './api/nhlcenter.js';
-const handlers={openliga,football,nhl,odds,form,draws,matchcenter,nhlcenter};
+const handlers={football,nhl,odds,form,draws,matchcenter,nhlcenter};
 const root=process.cwd();
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
