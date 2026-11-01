@@ -47,7 +47,7 @@ export default async function handler(req,res){
      const roster=await getExtra('matches/'+mid+'/roster.json').catch(()=>null);
      const sides=roster?.teams||roster?.roster||roster;
      const convert=arr=>(Array.isArray(arr)?arr:[]).map(p=>({name:p.name||p.fullName||p.player?.name||[p.firstName,p.lastName].filter(Boolean).join(' '),number:p.number??p.jerseyNumber??p.player?.number??null,position:p.position||p.player?.position||null,photo:null})).filter(p=>p.name).slice(0,35);
-     if(Array.isArray(sides)){extra.rosters.home=convert(sides.filter(p=>String(p.teamSide||p.side||'').toLowerCase()==='home'));extra.rosters.away=convert(sides.filter(p=>['away','guest','visitor'].includes(String(p.teamSide||p.side||'').toLowerCase()))}
+     if(Array.isArray(sides)){extra.rosters.home=convert(sides.filter(p=>String(p.teamSide||p.side||'').toLowerCase()==='home'));extra.rosters.away=convert(sides.filter(p=>['away','guest','visitor'].includes(String(p.teamSide||p.side||'').toLowerCase())))}
      else if(sides&&typeof sides==='object'){extra.rosters.home=convert(sides.home?.players||sides.home||[]);extra.rosters.away=convert(sides.guest?.players||sides.away?.players||sides.away||sides.visitor||[])}
     }
    }
