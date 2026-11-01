@@ -12,7 +12,7 @@ export default async function handler(req,res){
   const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
   if(!key)return res.status(200).json({configured:false,games:[],notice:'API-Hockey-Zugang fehlt'});
   const root='https://v1.hockey.api-sports.io';
-  const call=async path=>{const response=await fetch(root+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Hockey HTTP '+response.status);const body=await response.json();if(body.errors&&Object.keys(body.errors).length)throw Error('Hockey API nicht freigeschaltet');return body.response||[]};
+  const call=async path=>{const response=await fetch(root+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Hockey HTTP '+response.status);const body=await response.json();if(body.errors&&Object.keys(body.errors).length)throw Error('API-Hockey meldet: '+JSON.stringify(body.errors).slice(0,180));return body.response||[]};
   const leagues=await call('/leagues?search=DEL');
   const league=leagues.find(l=>/^DEL$/i.test(String(l.name||'')));
   if(!league)return res.status(200).json({configured:true,games:[],notice:'DEL-Liga nicht gefunden'});
