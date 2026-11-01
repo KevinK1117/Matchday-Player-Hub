@@ -10,18 +10,21 @@ export default async function handler(req,res){
  try{let data;
  if(a==='ice-del-detail'){
   const key=process.env.ICE_HOCKEY_API_KEY;
-  if(!key)return res.status(200).json({configured:false,notice:'ICE_HOCKEY_API_KEY fehlt'});
+  if(!key)return res.status(200).json({configured:false,matched:false,notice:'ICE_HOCKEY_API_KEY fehlt'});
   const date=String(q.date||'');
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
-  const root='https://api.icehockeyapi.com/v1';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
   const call=async path=>{
-   const response=await fetch(root+path,{headers:{'X-API-Key':key},signal:AbortSignal.timeout(8500)});
-   if(!response.ok)throw Error('Ice Hockey API '+response.status);
+   const response=await fetch('https://api.icehockeyapi.com/v1'+path,{headers:{'X-API-Key':key},signal:AbortSignal.timeout(9000)});
+   if(!response.ok)throw Error('Ice Hockey API HTTP '+response.status);
    return (await response.json()).data;
   };
-  const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]/g,'');
-  const similar=(a,b)=>{const x=norm(a),y=norm(b);return x.length>4&&y.length>4&&(x.includes(y)||y.includes(x))};
-  const games=await call('/games?date='+encodeURIComponent(date)+'&league_id=lg_k1vbdx0x&per_page=50');
+  const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const similar=(a,b)=>{const x=norm(a),y=norm(b);return x.length>3&&y.length>3&&(x.includes(y)||y.includes(x))};
+  const leagues=await call('/leagues?q=DEL&per_page=50');
+  const league=(Array.isArray(leagues)?leagues:[]).find(l=>/^DEL$/i.test(String(l.name||''))&&/germany|deutschland/i.test(String(l.country||'')))||
+   (Array.isArray(leagues)?leagues:[]).find(l=>/^DEL$/i.test(String(l.name||'')));
+  if(!league)return res.status(200).json({configured:true,matched:false,notice:'DEL-Liga in Ice Hockey API nicht gefunden'});
+  const games=await call('/games?date='+encodeURIComponent(date)+'&league_id='+encodeURIComponent(league.id)+'&per_page=50');
   const found=(Array.isArray(games)?games:[]).find(g=>similar(g.home_team?.name,q.home)&&similar(g.away_team?.name,q.away));
   if(!found)return res.status(200).json({configured:true,matched:false,notice:'Keine eindeutige DEL-Spielzuordnung'});
   const hid=found.home_team?.id,aid=found.away_team?.id,gid=found.id;
