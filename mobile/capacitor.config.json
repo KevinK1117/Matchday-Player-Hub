@@ -1,0 +1,7 @@
+{
+  "appId":"com.matchdaypro.app",
+  "appName":"Matchday Pro",
+  "webDir":"dist",
+  "server":{"androidScheme":"https"},
+  "plugins":{"CapacitorHttp":{"enabled":true}}
+}

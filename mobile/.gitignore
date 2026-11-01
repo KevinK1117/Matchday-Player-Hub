@@ -1,0 +1,17 @@
+node_modules/
+web/
+dist/
+.env*
+!.env.example
+android/.gradle/
+android/local.properties
+android/app/build/
+ios/App/Pods/
+ios/App/build/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+# Reproducible platform templates; regenerate with npm run setup:native.
+android/
+ios/
