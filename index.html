@@ -33,6 +33,18 @@ html[data-theme="dark"] body[data-view="combo"] .combo-main-tile>summary{backgro
 html[data-theme="dark"] body[data-view="combo"] .combo-main-tile[open]>summary{background:#174a3c!important;color:#a7f9d6!important}
 @media(max-width:700px){body[data-view="combo"] .combo-main-categories{margin:0 0 9px;border-radius:14px;padding:4px}body[data-view="combo"] .combo-main-tile>summary{min-height:44px;padding:7px 3px}body[data-view="combo"] .combo-main-tile-body{padding:10px 0 0}}
 
+
+/* Expanded combo tab content must span the full viewport-width panel */
+body[data-view="combo"] .combo-main-categories{grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+body[data-view="combo"] .combo-main-tile{display:contents!important}
+body[data-view="combo"] .combo-main-tile>summary{grid-row:1;min-width:0}
+body[data-view="combo"] .combo-main-tile[open]>.combo-main-tile-body{grid-column:1 / -1!important;grid-row:2!important;width:100%!important;min-width:0!important;max-width:none!important;display:block!important;box-sizing:border-box}
+body[data-view="combo"] .combo-main-tile-body>.combo-card,body[data-view="combo"] .combo-main-tile-body>.draw-card-panel,body[data-view="combo"] .combo-main-tile-body>.live-combo-box{width:100%!important;max-width:none!important;min-width:0!important}
+body[data-view="combo"] .combo-main-tile-body .combo-body,body[data-view="combo"] .combo-main-tile-body .drawpanel{width:100%!important;max-width:none!important}
+body[data-view="combo"] .combo-main-tile-body select#count,body[data-view="combo"] .combo-main-tile-body .primary{width:100%!important;max-width:none!important}
+body[data-view="combo"] .combo-main-tile-body .scorer-grid,body[data-view="combo"] .combo-main-tile-body .live-combo-grid{width:100%;min-width:0}
+@media(max-width:700px){body[data-view="combo"] .combo-main-tile-body{padding:10px 3px 3px!important}body[data-view="combo"] .combo-main-tile-body .combo-body{padding:10px 5px!important}body[data-view="combo"] .combo-main-tile-body label{max-width:none}body[data-view="combo"] .combo-main-tile-body .result-status{width:100%}}
+
 /* Matchday compact mobile combo and complete dark cards */
 html[data-theme="dark"] .card,html[data-theme="dark"] .card-head,html[data-theme="dark"] .combo-card .card-head,html[data-theme="dark"] .scorer-card,html[data-theme="dark"] .bet-card,html[data-theme="dark"] .drawpick,html[data-theme="dark"] .draw-card-panel,html[data-theme="dark"] .combo-body,html[data-theme="dark"] .drawpanel,html[data-theme="dark"] .result-status,html[data-theme="dark"] .total,html[data-theme="dark"] .modal,html[data-theme="dark"] .modal-content{background:#182231!important;color:#edf2fa!important;border-color:#344357!important}
 html[data-theme="dark"] .scorer-market,html[data-theme="dark"] .bet-market,html[data-theme="dark"] .live-combo-score{background:#173b34!important;color:#b9f5dc!important;border-color:#295a4b!important}
