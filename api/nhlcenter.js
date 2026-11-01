@@ -16,7 +16,24 @@ export default async function handler(req,res){
   const body=await response.json();
   if(body.errors&&Object.keys(body.errors).length)throw Error('API-Hockey: '+JSON.stringify(body.errors).slice(0,160));
   const g=(body.response||[])[0];if(!g)return res.status(404).json({error:'DEL-Spiel nicht gefunden'});
-  return res.status(200).json({configured:true,game:{id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS',periods:g.periods||null,scores:g.scores||null,venue:g.country?.name||null},source:'API-Hockey'});
+  const season=Number(String(g.date||'').slice(0,4))-(Number(String(g.date||'').slice(5,7))<7?1:0);
+  const fetchRoster=async teamId=>{
+   if(!teamId)return {players:[],available:false};
+   try{
+    const url='https://v1.hockey.api-sports.io/players?team='+encodeURIComponent(teamId)+'&season='+season;
+    const rr=await fetch(url,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(9000)});
+    if(!rr.ok)return {players:[],available:false};
+    const bb=await rr.json();
+    if(bb.errors&&Object.keys(bb.errors).length)return {players:[],available:false};
+    const players=(bb.response||[]).map(item=>{
+     const p=item.player||item;
+     return {id:p.id||null,name:p.name||[p.firstname,p.lastname].filter(Boolean).join(' ')||'',number:p.number??null,position:p.position||null,photo:p.photo||p.image||null};
+    }).filter(p=>p.name).slice(0,45);
+    return {players,available:players.length>0};
+   }catch{return {players:[],available:false}}
+  };
+  const [homeRoster,awayRoster]=await Promise.all([fetchRoster(g.teams?.home?.id),fetchRoster(g.teams?.away?.id)]);
+  return res.status(200).json({configured:true,game:{id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS',periods:g.periods||null,scores:g.scores||null,venue:g.country?.name||null,homeRoster,awayRoster},source:'API-Hockey'});
  }
  if(a==='del'){
   const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
