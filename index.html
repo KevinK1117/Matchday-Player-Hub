@@ -20,6 +20,9 @@ html[data-theme="dark"] .live-probability,html[data-theme="dark"] .draw-prob-top
 
 
 /* Real full-width tab panels: tab navigation and content are siblings */
+/* The categories replace both sidebar cards, so the host must use one full-width column. */
+body[data-view="combo"] .rightcol{display:block!important;width:100%;min-width:0}
+
 body[data-view="combo"] .combo-main-categories{display:block!important;width:100%!important;padding:5px!important;border:1px solid var(--line);border-radius:16px;background:#fff}
 body[data-view="combo"] .combo-tab-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
 body[data-view="combo"] .combo-tab{min-width:0;border:0;border-radius:12px;background:transparent;color:#8996a8;font-weight:750;font-size:clamp(11px,2.8vw,14px);line-height:1.2;padding:12px 4px;min-height:52px;cursor:pointer}
