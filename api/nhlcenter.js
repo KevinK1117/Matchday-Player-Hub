@@ -44,11 +44,16 @@ export default async function handler(req,res){
     const mid=Number(match.id||match.matchId||match.match_id);
     if(Number.isInteger(mid)&&mid>0){
      extra.matched=true;
-     const roster=await getExtra('matches/'+mid+'/roster.json').catch(()=>null);
-     const sides=roster?.teams||roster?.roster||roster;
-     const convert=arr=>(Array.isArray(arr)?arr:[]).map(p=>({name:p.name||p.fullName||p.player?.name||[p.firstName,p.lastName].filter(Boolean).join(' '),number:p.number??p.jerseyNumber??p.player?.number??null,position:p.position||p.player?.position||null,photo:null})).filter(p=>p.name).slice(0,35);
-     if(Array.isArray(sides)){extra.rosters.home=convert(sides.filter(p=>String(p.teamSide||p.side||'').toLowerCase()==='home'));extra.rosters.away=convert(sides.filter(p=>['away','guest','visitor'].includes(String(p.teamSide||p.side||'').toLowerCase())))}
-     else if(sides&&typeof sides==='object'){extra.rosters.home=convert(sides.home?.players||sides.home||[]);extra.rosters.away=convert(sides.guest?.players||sides.away?.players||sides.away||sides.visitor||[])}
+     const homeId=Number(match.home?.id||match.home_id),awayId=Number(match.guest?.id||match.guest_id||match.away?.id);
+     const toPlayers=raw=>{
+      const list=Array.isArray(raw)?raw:Array.isArray(raw?.players)?raw.players:Array.isArray(raw?.data)?raw.data:[];
+      return list.map(p=>({id:p.playerId||p.player_id||p.id||null,name:p.fullName||[p.firstname||p.firstName||p.name,p.surname||p.lastName].filter(Boolean).join(' '),number:p.jersey??p.number??null,position:p.position||null,goals:p.goals??null,assists:p.assists??null,shots:p.shots_on_goal??p.shotsOnGoal??null,games:p.games??null,photo:null})).filter(p=>p.name&&p.games!=null).sort((a,b)=>Number(b.goals||0)-Number(a.goals||0)).slice(0,45);
+     };
+     if(homeId>0&&awayId>0){
+      const [hs,as]=await Promise.allSettled([getExtra('league-team-stats/'+seasonStart+'/1/'+homeId+'.json'),getExtra('league-team-stats/'+seasonStart+'/1/'+awayId+'.json')]);
+      if(hs.status==='fulfilled')extra.rosters.home=toPlayers(hs.value);
+      if(as.status==='fulfilled')extra.rosters.away=toPlayers(as.value);
+     }
     }
    }
   }catch{}
