@@ -26,7 +26,7 @@ const portrait=(id,nhl=false,photo=null,team=null,season=null)=>{const safePhoto
 const crest=t=>`<span class="crest">${t.logo&&/^https:\/\/(media.api-sports.io|assets.nhle.com|media.api-sports.io)\//.test(t.logo)?`<img src="${esc(t.logo)}" alt="" loading="lazy">`:esc(t.name.slice(0,2).toUpperCase())}</span>`;
 function form(s){return `<span class="form">${String(s||'').slice(-5).split('').map(x=>`<i class="${esc(x)}">${({W:'S',D:'U',L:'N'})[x]||'–'}</i>`).join('')}</span>`}
 function requestTimeout(ms){if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'){try{return AbortSignal.timeout(ms)}catch(e){console.warn('AbortSignal.timeout nicht verfügbar:',e)}}return undefined}
-async function get(q,sourceSport=sport){const r=await fetch((sourceSport==='nhl'||sourceSport==='del'?'/api/nhlcenter?':'/api/matchcenter?')+new URLSearchParams(q),{}),d=await r.json();if(!r.ok||d.error)throw Error(d.error||'Datenabruf fehlgeschlagen');return d}
+async function get(q,sourceSport=sport){const r=await fetch((sourceSport==='nhl'||sourceSport==='del'?'/api/nhlcenter?':'/api/matchcenter?')+new URLSearchParams(q),{cache:'no-store'}),d=await r.json();if(!r.ok||d.error)throw Error(d.error||'Datenabruf fehlgeschlagen');return d}
 function footballLeagueOptions(){
  const fixed=[...leagueList],seen=new Set(fixed.map(x=>x[0])),discovered=[];
  // Use the API's real league IDs, rather than guessed IDs for the Nordic second tiers.
