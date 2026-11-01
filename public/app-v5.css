@@ -202,3 +202,27 @@ body[data-view=combo] .draw-data-status span{padding:3px 6px;font-size:10px}
 @media(max-width:700px){body[data-view=combo] .rightcol{display:block}body[data-view=combo] .rightcol>section{margin-bottom:10px}}
 
 .scorer-market{display:flex;align-items:center;justify-content:space-between;gap:8px}.scorer-prob{font-size:16px;font-weight:850;color:#0b8065;text-align:right;white-space:nowrap}.scorer-prob small{display:block;font-size:9px;font-weight:500;color:#667e77}.draw-compact-detail{margin-top:9px;border-top:1px solid #e5e9ed;padding-top:7px;font-size:11px;color:#637384}.draw-compact-detail summary{cursor:pointer;font-weight:650}.draw-compact-detail p{line-height:1.5;margin:7px 0}.drawpick .draw-prob-top{margin-top:-5px}.drawpick .bet-facts{margin-bottom:4px}
+
+/* iPhone compact cards and match-table form selector */
+body[data-view=combo] .drawpick.bet-card{padding:10px 11px!important;margin:0 0 8px}
+body[data-view=combo] .drawpick .draw-validation-label{font-size:10px;line-height:1.2;padding-right:92px;min-height:22px}
+body[data-view=combo] .drawpick .draw-prob-top{position:absolute;right:10px;top:8px;margin:0;font-size:19px;line-height:1.1;color:#008c68}
+body[data-view=combo] .drawpick .draw-prob-top small{font-size:8px;max-width:90px;line-height:1.2}
+body[data-view=combo] .drawpick .bet-meta{margin-top:5px}
+body[data-view=combo] .drawpick .bet-match{font-size:14px;margin:5px 0}
+body[data-view=combo] .drawpick .bet-market{padding:7px 9px;min-height:48px;background:#d8f7e9}
+body[data-view=combo] .drawpick .bet-code{height:34px;width:34px;font-size:20px}
+body[data-view=combo] .drawpick .bet-market strong{font-size:15px}
+body[data-view=combo] .drawpick .draw-compact-detail{margin-top:5px;padding-top:5px}
+body[data-view=combo] .live-analysis-card,body[data-view=combo] .live-tip-card{padding:10px!important}
+body[data-view=combo] .live-probability{position:relative;padding:7px 9px;font-size:11px;margin:6px 0}
+body[data-view=combo] .live-probability strong{float:right;font-size:19px}
+body[data-view=combo] .live-probability small{clear:both;font-size:10px}
+.match-form-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;background:var(--bg);border-bottom:1px solid var(--line);font-weight:700}
+.match-form-toolbar select{min-width:140px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--soft);color:var(--ink);font-weight:700}
+.tablewrap:not(.show-form) th:last-child,.tablewrap:not(.show-form) td:last-child{display:none}
+.tablewrap table{width:100%;min-width:0;table-layout:auto}
+.tablewrap td,.tablewrap th{padding:9px 5px;white-space:nowrap}
+.tablewrap td:nth-child(2),.tablewrap th:nth-child(2){white-space:normal;min-width:120px}
+@media(max-width:700px){.tablewrap td,.tablewrap th{font-size:11px;padding:8px 3px}.tablewrap td:nth-child(2),.tablewrap th:nth-child(2){min-width:95px}.tablewrap.show-form{overflow-x:auto}}
+body.dark .match-form-toolbar select,body[data-theme=dark] .match-form-toolbar select{background:#20382f;color:#f3fff9;border-color:#416357}
