@@ -1,3 +1,4 @@
+import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import openliga from '../lib/openliga.js';
 import {isScorerCompetition} from '../public/competitions.js';
@@ -13,6 +14,12 @@ async function api(path,key){
  // empty lineup from the server cache during the pre-match window.
  const ttl=path.startsWith('/odds/live?')?15000:path.startsWith('/fixtures/lineups?')?20000:path.startsWith('/fixtures?id=')?20000:path.startsWith('/fixtures?date')?30000:300000;
  cache.set(path,{until:Date.now()+ttl,data});if(cache.size>200)cache.delete(cache.keys().next().value);return data;
+}
+const playerPending=new Map(),playerWaiters=[];let playerRequests=0;
+async function playerApi(path,key){
+ if(playerPending.has(path))return playerPending.get(path);
+ const promise=(async()=>{if(playerRequests>=2)await new Promise(resolve=>playerWaiters.push(resolve));else playerRequests++;try{return await api(path,key)}finally{const next=playerWaiters.shift();if(next)next();else playerRequests--}})();
+ playerPending.set(path,promise);try{return await promise}finally{playerPending.delete(path)}
 }
 const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
@@ -37,16 +44,16 @@ export default async function handler(req,res){
  if(action==='table')data=await api('/standings?league='+q.league+'&season='+q.season,key);
  }
  if(action==='player'){
- const profiles=await api('/players?id='+q.id+'&season='+q.season,key);
+ const profiles=await playerApi('/players?id='+q.id+'&season='+q.season,key);
  const team=profiles[0]?.statistics?.[0]?.team?.id;
  let recent=[],recentError=null;
  if(team){try{
- const fixtures=(await api('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isScorerCompetition(g.league)).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
- recent=await Promise.all(fixtures.map(async g=>{try{const sides=await api('/fixtures/players?fixture='+g.fixture.id,key);const entry=sides.flatMap(s=>s.players||[]).find(p=>Number(p.player.id)===Number(q.id));const st=entry?.statistics?.[0];return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,minutes:st?.games?.minutes??null,goals:st?.goals?.total??null,shots:st?.shots?.total??null,onTarget:st?.shots?.on??null,available:!!st};}catch{return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,available:false}}}));
+ const fixtures=(await playerApi('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isScorerCompetition(g.league)&&['FT','AET','PEN'].includes(g.fixture?.status?.short)&&Date.parse(g.fixture.date)<Date.now()).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,5);
+ recent=await Promise.all(fixtures.map(async g=>{try{const sides=await playerApi('/fixtures/players?fixture='+g.fixture.id,key);const entry=sides.flatMap(s=>s.players||[]).find(p=>Number(p.player.id)===Number(q.id));const st=entry?.statistics?.[0];return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,minutes:st?.games?.minutes??null,goals:st?.goals?.total??null,shots:st?.shots?.total??null,onTarget:st?.shots?.on??null,available:!!st};}catch{return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,available:false}}}));
  }catch{recentError='Letzte Spiele nicht verfügbar'}}
  let participation='Keine kommende Begegnung verfügbar';
- if(team){try{const next=(await api('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await api('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
- data={profiles,recent,recentError,participation};
+ if(team){try{const next=(await playerApi('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await playerApi('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
+ data={profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season)};
  }
  if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
  if(action==='squad'){

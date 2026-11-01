@@ -1,3 +1,4 @@
+import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
 import {fetchJson,value,fetchBerlinSchedule} from './nhl.js';
 const ended=g=>['FINAL','OFF'].includes(g.gameState);
 export function normalizeGame(g){const team=t=>({id:t?.id,name:value(t?.placeName)&&value(t?.commonName)?value(t.placeName)+' '+value(t.commonName):value(t?.name)||t?.abbrev||'Team',logo:t?.abbrev?`https://assets.nhle.com/logos/nhl/svg/${t.abbrev}_light.svg`:null,abbrev:t?.abbrev});return {fixture:{id:g.id,date:g.startTimeUTC,status:{short:ended(g)?'FT':['LIVE','CRIT'].includes(g.gameState)?'LIVE':['FUT','PRE'].includes(g.gameState)?'NS':g.gameState,elapsed:null},venue:{name:value(g.venue)}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:Number(String(g.season||'').slice(0,4))||new Date(g.startTimeUTC).getUTCFullYear()},teams:{home:team(g.homeTeam),away:team(g.awayTeam)},goals:{home:g.homeTeam?.score??null,away:g.awayTeam?.score??null},sport:'nhl'};}
@@ -127,7 +128,7 @@ export default async function handler(req,res){
   data=[...people.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
  }
  if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
- if(a==='player')data=await fetchJson('/player/'+q.id+'/landing');
+ if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);data={...p,last5Games:recent,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
  if(a==='lineups'){
   const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
   const stats=box.playerByGameStats||{};

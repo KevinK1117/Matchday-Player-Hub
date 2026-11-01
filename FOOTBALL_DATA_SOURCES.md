@@ -18,3 +18,9 @@ Additional recent result form contributes 15% to goal expectations (both teams m
 Live percentages are `100 / verified decimal odds`, including bookmaker margin; absent odds show `– %`. No probability is fabricated. Player-level xG, injury and lineup evidence still requires the existing API-Sports/licensed feeds.
 
 Documentation: https://docs.football-data.org/general/v4/match.html and https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date-range
+
+## Profile xG
+
+Profiles accept season-level player xG from the existing `XG_FEED_URL` (optional `XG_FEED_TOKEN`). The JSON response must contain `players` with exactly one matching row: `{"playerId":123,"sport":"football","season":2026,"scope":"season","xG":4.21,"xG90":0.35,"source":"Licensed provider"}`. NHL uses the eight-digit season, e.g. `20262027`, and `sport:"nhl"`. Fixture xG is never relabeled as a season total. Without matching provider data the UI says “Nicht verfügbar”.
+
+Last-five goals load progressively for visible top scorers, with two concurrent player requests and a five-minute client cache. Football uses the latest five finished team games with published player stats; NHL uses its official last-five player log. A total requires five known goal values. Zero is preserved; missing data is not converted to zero.
