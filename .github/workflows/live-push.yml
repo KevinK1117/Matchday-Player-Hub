@@ -8,11 +8,14 @@ on:
         description: 'Testnachricht an angemeldete Geräte senden'
         type: boolean
         default: false
+concurrency:
+  group: matchday-live-push
+  cancel-in-progress: false
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Check live tip signals
+      - name: Check favorite events and live tip signals
         env:
           CRON_SECRET: ${{ secrets.MATCHDAY_CRON_SECRET }}
         run: |
