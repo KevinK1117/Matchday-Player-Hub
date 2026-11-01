@@ -28,7 +28,7 @@ export default async function handler(req,res){
   if(!league)return res.status(200).json({configured:true,games:[],notice:'DEL-Liga nicht gefunden'});
   const season=Number(String(q.date).slice(0,4))-(Number(String(q.date).slice(5,7))<7?1:0);
   const games=await call('/games?date='+encodeURIComponent(q.date)+'&league='+league.id+'&season='+season);
-  return res.status(200).json({configured:true,games:games.map(g=>({id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS'})),source:'API-Hockey'});
+  return res.status(200).json({configured:true,games:games.map(g=>({id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS'})),source:'API-Hockey'});
  }
  if(a==='fixtures'){data=(await fetchBerlinSchedule(String(q.date))).games.map(normalizeGame)}
  if(a==='table'){const rows=await fetchJson('/standings/now');data=rows.standings||[]}
