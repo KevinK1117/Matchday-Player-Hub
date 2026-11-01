@@ -3,11 +3,21 @@ const ended=g=>['FINAL','OFF'].includes(g.gameState);
 export function normalizeGame(g){const team=t=>({id:t?.id,name:value(t?.placeName)&&value(t?.commonName)?value(t.placeName)+' '+value(t.commonName):value(t?.name)||t?.abbrev||'Team',logo:t?.abbrev?`https://assets.nhle.com/logos/nhl/svg/${t.abbrev}_light.svg`:null,abbrev:t?.abbrev});return {fixture:{id:g.id,date:g.startTimeUTC,status:{short:ended(g)?'FT':['LIVE','CRIT'].includes(g.gameState)?'LIVE':['FUT','PRE'].includes(g.gameState)?'NS':g.gameState,elapsed:null},venue:{name:value(g.venue)}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:Number(String(g.season||'').slice(0,4))||new Date(g.startTimeUTC).getUTCFullYear()},teams:{home:team(g.homeTeam),away:team(g.awayTeam)},goals:{home:g.homeTeam?.score??null,away:g.awayTeam?.score??null},sport:'nhl'};}
 export default async function handler(req,res){
  res.setHeader('Cache-Control',String(req.query?.action||'')==='lineups'?'no-store, max-age=0':'s-maxage=60, stale-while-revalidate=60');const q=req.query||{},a=q.action||'fixtures';
- if(!['fixtures','detail','table','player','squad','scorers','lineups','del'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
+ if(!['fixtures','detail','table','player','squad','scorers','lineups','del','del-detail'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
  if(['fixtures','del'].includes(a)&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
- if(['detail','lineups','player'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
+ if(['detail','lineups','player','del-detail'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
  if(a==='squad'&&!/^[A-Z]{3}$/.test(String(q.team||'')))return res.status(400).json({error:'Ungültiges NHL-Team'});
  try{let data;
+ if(a==='del-detail'){
+  const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
+  if(!key)return res.status(503).json({error:'API-Hockey-Zugang fehlt'});
+  const response=await fetch('https://v1.hockey.api-sports.io/games?id='+encodeURIComponent(q.id),{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});
+  if(!response.ok)throw Error('Hockey HTTP '+response.status);
+  const body=await response.json();
+  if(body.errors&&Object.keys(body.errors).length)throw Error('API-Hockey: '+JSON.stringify(body.errors).slice(0,160));
+  const g=(body.response||[])[0];if(!g)return res.status(404).json({error:'DEL-Spiel nicht gefunden'});
+  return res.status(200).json({configured:true,game:{id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS',periods:g.periods||null,scores:g.scores||null,venue:g.country?.name||null},source:'API-Hockey'});
+ }
  if(a==='del'){
   const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
   if(!key)return res.status(200).json({configured:false,games:[],notice:'API-Hockey-Zugang fehlt'});
