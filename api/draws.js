@@ -1,3 +1,4 @@
+import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {isDrawCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
@@ -120,7 +121,7 @@ function ranks(standings,id){
  const row=groups.flat().find(x=>Number(x.team?.id)===Number(id));
  return row?{rank:row.rank,points:row.points,played:row.all?.played,goalDiff:row.goalsDiff}:null;
 }
-async function evaluate(g,key,date,independent){
+async function evaluate(g,key,date,independent,additional){
  const h=g.teams.home,a=g.teams.away,isCup=g.league?.type==='Cup';
  const historyPath=id=>'/fixtures?team='+id+(isCup?'&last=20':'&league='+g.league.id+'&season='+g.league.season+'&last=20');
  // Two required team histories; standings and H2H are optional, never a reason
@@ -155,6 +156,8 @@ async function evaluate(g,key,date,independent){
  let lambdaAway=bound((aAttack*.52+hDefence*.48)*.95,.25,3.6);
  // When a separately authorized, reliably mapped second source is configured,
  // require reasonable agreement rather than blindly increasing a prediction score.
+ const externalHome=externalTeamForm(additional,h.name,g.league.id,date,g.league.name,g.league.country),externalAway=externalTeamForm(additional,a.name,g.league.id,date,g.league.name,g.league.country);
+ if(externalHome&&externalAway){lambdaHome=bound(lambdaHome*.85+(externalHome.scored+externalAway.conceded)/2*.15,.25,3.6);lambdaAway=bound(lambdaAway*.85+(externalAway.scored+externalHome.conceded)/2*.15,.25,3.6);}
  const independentFixture=independent?.fixtures?.get(String(g.fixture.id))||null;
  if(independentFixture){
    if(Math.abs(lambdaHome-independentFixture.expectedHomeGoals)>1.25||
@@ -206,7 +209,7 @@ async function evaluate(g,key,date,independent){
  return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
   // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
   // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
-  return {...p,score:Math.max(0,Math.min(88,p.score)),independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
+  return {...p,score:Math.max(0,Math.min(88,p.score)),externalForm:externalHome&&externalAway?{sources:[...new Set([...externalHome.sources,...externalAway.sources])],homeMatches:externalHome.played,awayMatches:externalAway.played,weight:.15}:null,independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score)};
 }
 export default async function handler(req,res){
@@ -217,7 +220,7 @@ export default async function handler(req,res){
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
-  const independent=await getFlashscoreEvidence(date,'football');
+  const [independent,additional]=await Promise.all([getFlashscoreEvidence(date,'football'),getFootballEvidence(date)]);
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isDrawCompetition(g.league)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
   // Include all fixtures from the strict approved competition list, not only top-ranked leagues.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
@@ -249,7 +252,7 @@ export default async function handler(req,res){
    while(next<selected.length){
     if(Date.now()-started>budgetMs-12500||providerCooldownUntil>Date.now())break;
     const index=next++;
-    try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,independent)}}
+    try{results[index]={status:'fulfilled',value:await evaluate(selected[index],key,date,independent,additional)}}
     catch(reason){results[index]={status:'rejected',reason:String(reason?.message||reason).slice(0,160)}}
    }
   }));
@@ -297,6 +300,6 @@ export default async function handler(req,res){
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
   if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht zusätzlich bestätigt.';
   if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
-  return res.status(200).json({configured:true,date,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
 }
