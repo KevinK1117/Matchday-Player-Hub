@@ -34,6 +34,13 @@ html[data-theme="dark"] body[data-view="combo"] .combo-main-tile[open]>summary{b
 @media(max-width:700px){body[data-view="combo"] .combo-main-categories{margin:0 0 9px;border-radius:14px;padding:4px}body[data-view="combo"] .combo-main-tile>summary{min-height:44px;padding:7px 3px}body[data-view="combo"] .combo-main-tile-body{padding:10px 0 0}}
 
 
+
+/* Fix: details elements are grid items; their child cannot span parent grid columns */
+body[data-view="combo"] .combo-main-categories{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important}
+body[data-view="combo"] .combo-main-tile{display:contents!important}
+body[data-view="combo"] .combo-main-tile>.combo-main-tile-body{grid-column:1/-1!important;grid-row:2!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box}
+body[data-view="combo"] .combo-main-tile-body>.live-combo-box,body[data-view="combo"] .combo-main-tile-body>.draw-card-panel{width:100%!important;max-width:none!important}
+body[data-view="combo"] .combo-main-tile-body .live-combo-box,body[data-view="combo"] .combo-main-tile-body .live-combo-box>*{max-width:none}
 /* Expanded combo tab content must span the full viewport-width panel */
 body[data-view="combo"] .combo-main-categories{grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
 body[data-view="combo"] .combo-main-tile{display:contents!important}
@@ -498,8 +505,9 @@ if(comboSection&&livePanel&&comboHost){
   details.className='combo-main-tile';
   details.innerHTML='<summary><span class="combo-tile-symbol">'+symbol+'</span><strong>'+label+'</strong><span class="combo-tile-chevron">⌄</span></summary>';
   const body=document.createElement('div');body.className='combo-main-tile-body';
-  if(panel===comboSection){body.append(...Array.from(comboHost.childNodes).filter(n=>n!==livePanel));comboSection.remove();details.append(body);}
-  else{body.append(panel);details.append(body);}
+  if(panel===comboSection){body.append(...Array.from(comboHost.childNodes).filter(n=>n!==livePanel));comboSection.remove();}
+  else{body.append(panel);}
+  details.append(body);
   details.addEventListener('toggle',()=>{if(details.open){for(const other of comboCategories.querySelectorAll('details.combo-main-tile'))if(other!==details)other.open=false}});
   comboCategories.append(details);
  }
