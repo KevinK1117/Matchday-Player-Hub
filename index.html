@@ -41,6 +41,23 @@ body[data-view="combo"] .combo-main-tile{display:contents!important}
 body[data-view="combo"] .combo-main-tile>.combo-main-tile-body{grid-column:1/-1!important;grid-row:2!important;width:100%!important;max-width:none!important;min-width:0!important;box-sizing:border-box}
 body[data-view="combo"] .combo-main-tile-body>.live-combo-box,body[data-view="combo"] .combo-main-tile-body>.draw-card-panel{width:100%!important;max-width:none!important}
 body[data-view="combo"] .combo-main-tile-body .live-combo-box,body[data-view="combo"] .combo-main-tile-body .live-combo-box>*{max-width:none}
+
+/* Real full-width tab panels: tab navigation and content are siblings */
+body[data-view="combo"] .combo-main-categories{display:block!important;width:100%!important;padding:5px!important;border:1px solid var(--line);border-radius:16px;background:#fff}
+body[data-view="combo"] .combo-tab-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
+body[data-view="combo"] .combo-tab{min-width:0;border:0;border-radius:12px;background:transparent;color:#8996a8;font-weight:750;font-size:clamp(11px,2.8vw,14px);line-height:1.2;padding:12px 4px;min-height:52px;cursor:pointer}
+body[data-view="combo"] .combo-tab.active{background:#e3f8ef;color:#078f6d}
+body[data-view="combo"] .combo-tab-content,body[data-view="combo"] .combo-tab-panel{display:block;width:100%!important;max-width:none!important;min-width:0!important}
+body[data-view="combo"] .combo-tab-panel[hidden]{display:none!important}
+body[data-view="combo"] .combo-tab-panel{padding:10px 3px 3px}
+body[data-view="combo"] .combo-tab-panel>.live-combo-box,body[data-view="combo"] .combo-tab-panel>.draw-card-panel{width:100%!important;max-width:none!important}
+body[data-view="combo"] .combo-tab-panel .combo-body{width:100%!important;max-width:none!important}
+body[data-view="combo"] .combo-tab-panel select#count,body[data-view="combo"] .combo-tab-panel .primary{width:100%!important;max-width:none!important}
+html[data-theme="dark"] body[data-view="combo"] .combo-main-categories{background:#182231;border-color:#344357}
+html[data-theme="dark"] body[data-view="combo"] .combo-tab{color:#aab9cd}
+html[data-theme="dark"] body[data-view="combo"] .combo-tab.active{background:#174a3c;color:#b9f9df}
+@media(max-width:700px){body[data-view="combo"] .combo-tab{min-height:44px;padding:9px 3px}body[data-view="combo"] .combo-tab-panel{padding:8px 1px 2px}}
+
 /* Expanded combo tab content must span the full viewport-width panel */
 body[data-view="combo"] .combo-main-categories{grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
 body[data-view="combo"] .combo-main-tile{display:contents!important}
@@ -492,25 +509,23 @@ comboCategories.className='combo-main-categories';
 const livePanel=document.querySelector('#combo-card .live-combo-box');
 const comboHost=document.querySelector('#combo-card .combo-body');
 const comboSection=$('combo-card');
-const categoryItems=[
- ['⚽','Torschützen',comboSection],
- ['⏱','Live-Tipps pro Spiel',livePanel],
- ['✕','Remis & Außenseiter',drawSection]
-];
+const categoryItems=[['⚽','Torschützen',comboSection],['⏱','Live-Tipps pro Spiel',livePanel],['✕','Remis & Außenseiter',drawSection]];
 if(comboSection&&livePanel&&comboHost){
  const parent=comboSection.parentNode;
  parent.insertBefore(comboCategories,comboSection);
- for(const [symbol,label,panel] of categoryItems){
-  const details=document.createElement('details');
-  details.className='combo-main-tile';
-  details.innerHTML='<summary><span class="combo-tile-symbol">'+symbol+'</span><strong>'+label+'</strong><span class="combo-tile-chevron">⌄</span></summary>';
-  const body=document.createElement('div');body.className='combo-main-tile-body';
+ const tabBar=document.createElement('div');tabBar.className='combo-tab-bar';
+ const content=document.createElement('div');content.className='combo-tab-content';
+ comboCategories.append(tabBar,content);
+ const tabs=[];
+ categoryItems.forEach(([symbol,label,panel],index)=>{
+  const tab=document.createElement('button');tab.type='button';tab.className='combo-tab';tab.textContent=label;tab.setAttribute('role','tab');tab.setAttribute('aria-selected','false');
+  const body=document.createElement('section');body.className='combo-tab-panel';body.hidden=true;body.setAttribute('role','tabpanel');
   if(panel===comboSection){body.append(...Array.from(comboHost.childNodes).filter(n=>n!==livePanel));comboSection.remove();}
-  else{body.append(panel);}
-  details.append(body);
-  details.addEventListener('toggle',()=>{if(details.open){for(const other of comboCategories.querySelectorAll('details.combo-main-tile'))if(other!==details)other.open=false}});
-  comboCategories.append(details);
- }
+  else body.append(panel);
+  tabBar.append(tab);content.append(body);tabs.push({tab,body});
+  tab.addEventListener('click',()=>{tabs.forEach((item,j)=>{const active=j===index;item.tab.classList.toggle('active',active);item.tab.setAttribute('aria-selected',String(active));item.body.hidden=!active})});
+ });
+ tabs[0].tab.click();
 }
 function syncBacktestLeagues(){
  const select=$('backtestLeague');if(!select)return;
