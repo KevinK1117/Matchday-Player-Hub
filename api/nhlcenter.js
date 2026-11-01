@@ -23,7 +23,36 @@ export default async function handler(req,res){
     if(er.ok){const eb=await er.json();if(!eb.errors||!Object.keys(eb.errors).length){events=(eb.response||[]).slice(0,80).map(e=>({type:String(e.type||''),detail:String(e.detail||''),time:String(e.time||''),team:String(e.team?.name||''),player:String(e.player?.name||'' )}));eventsAvailable=true}}
    }catch{}
   }
-  return res.status(200).json({configured:true,game:{id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS',periods:g.periods||null,scores:g.scores||null,venue:g.country?.name||null,events,eventsAvailable},source:'API-Hockey'});
+  // Supplemental DEL GameStats feed: match by local date and BOTH team names, never by API-Hockey ID.
+  let extra={source:'DEL GameStats',matched:false,rosters:{home:[],away:[]},h2h:[]};
+  try{
+   const seasonStart=Number(String(g.date).slice(0,4))-(Number(String(g.date).slice(5,7))<7?1:0);
+   const base='https://s3.eu-west-1.amazonaws.com/de.hokejovyzapis.cz/';
+   const getExtra=async path=>{const rr=await fetch(base+path,{signal:AbortSignal.timeout(6500)});if(!rr.ok)throw Error('GameStats '+rr.status);return rr.json()};
+   const schedule=await getExtra('league-matches/'+seasonStart+'/1.json');
+   const rows=Array.isArray(schedule)?schedule:Array.isArray(schedule.matches)?schedule.matches:Array.isArray(schedule.data)?schedule.data:[];
+   const clean=name=>String(name||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]/g,'').replace(/^(fischtown|penny)/,'');
+   const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(g.date));
+   const match=rows.find(m=>{
+    const home=m.home?.name||m.home_name||m.homeName||'';
+    const away=m.guest?.name||m.guest_name||m.away?.name||m.away_name||'';
+    const day=String(m.startDate||m.start_date||m.date||'').slice(0,10);
+    const similar=(a,b)=>{const x=clean(a),y=clean(b);return x.length>4&&y.length>4&&(x.includes(y)||y.includes(x))};
+    return day===date&&similar(home,g.teams?.home?.name)&&similar(away,g.teams?.away?.name);
+   });
+   if(match){
+    const mid=Number(match.id||match.matchId||match.match_id);
+    if(Number.isInteger(mid)&&mid>0){
+     extra.matched=true;
+     const roster=await getExtra('matches/'+mid+'/roster.json').catch(()=>null);
+     const sides=roster?.teams||roster?.roster||roster;
+     const convert=arr=>(Array.isArray(arr)?arr:[]).map(p=>({name:p.name||p.fullName||p.player?.name||[p.firstName,p.lastName].filter(Boolean).join(' '),number:p.number??p.jerseyNumber??p.player?.number??null,position:p.position||p.player?.position||null,photo:null})).filter(p=>p.name).slice(0,35);
+     if(Array.isArray(sides)){extra.rosters.home=convert(sides.filter(p=>String(p.teamSide||p.side||'').toLowerCase()==='home'));extra.rosters.away=convert(sides.filter(p=>['away','guest','visitor'].includes(String(p.teamSide||p.side||'').toLowerCase()))}
+     else if(sides&&typeof sides==='object'){extra.rosters.home=convert(sides.home?.players||sides.home||[]);extra.rosters.away=convert(sides.guest?.players||sides.away?.players||sides.away||sides.visitor||[])}
+    }
+   }
+  }catch{}
+  return res.status(200).json({configured:true,game:{id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS',periods:g.periods||null,scores:g.scores||null,venue:g.country?.name||null,events,eventsAvailable,extra},source:'API-Hockey + DEL GameStats'});
  }
  if(a==='del'){
   const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
