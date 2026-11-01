@@ -18,6 +18,21 @@ html[data-theme="dark"] .live-probability,html[data-theme="dark"] .draw-prob-top
 #matchday-theme-toggle{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:transparent;color:var(--ink);font-weight:700;white-space:nowrap}
 @media(max-width:600px){#matchday-theme-toggle{padding:8px;font-size:12px}.top{flex-wrap:wrap}.brand strong{font-size:24px}}
 
+
+/* Compact segmented combo tabs inspired by the scores navigation */
+body[data-view="combo"] .combo-main-categories{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;padding:5px;border:1px solid var(--line);border-radius:16px;background:#fff;margin:0 0 12px;align-items:start}
+body[data-view="combo"] .combo-main-tile{display:contents}
+body[data-view="combo"] .combo-main-tile>summary{grid-row:1;display:flex;align-items:center;justify-content:center;min-width:0;min-height:52px;padding:8px 5px;gap:2px;border:0;border-radius:12px;background:transparent;text-align:center;cursor:pointer;list-style:none;color:#8794a6}
+body[data-view="combo"] .combo-main-tile>summary::-webkit-details-marker{display:none}
+body[data-view="combo"] .combo-main-tile>summary strong{font-size:clamp(10px,2.8vw,13px);line-height:1.2;font-weight:750}
+body[data-view="combo"] .combo-main-tile>summary .combo-tile-symbol,body[data-view="combo"] .combo-main-tile>summary .combo-tile-chevron{display:none}
+body[data-view="combo"] .combo-main-tile[open]>summary{background:#e4f8ef;color:#078d69}
+body[data-view="combo"] .combo-main-tile-body{grid-column:1/-1;grid-row:2;padding:12px 3px 3px;min-width:0;background:transparent}
+html[data-theme="dark"] body[data-view="combo"] .combo-main-categories{background:#182231;border-color:#344357}
+html[data-theme="dark"] body[data-view="combo"] .combo-main-tile>summary{background:transparent!important;color:#a9b9cc!important}
+html[data-theme="dark"] body[data-view="combo"] .combo-main-tile[open]>summary{background:#174a3c!important;color:#a7f9d6!important}
+@media(max-width:700px){body[data-view="combo"] .combo-main-categories{margin:0 0 9px;border-radius:14px;padding:4px}body[data-view="combo"] .combo-main-tile>summary{min-height:44px;padding:7px 3px}body[data-view="combo"] .combo-main-tile-body{padding:10px 0 0}}
+
 /* Matchday compact mobile combo and complete dark cards */
 html[data-theme="dark"] .card,html[data-theme="dark"] .card-head,html[data-theme="dark"] .combo-card .card-head,html[data-theme="dark"] .scorer-card,html[data-theme="dark"] .bet-card,html[data-theme="dark"] .drawpick,html[data-theme="dark"] .draw-card-panel,html[data-theme="dark"] .combo-body,html[data-theme="dark"] .drawpanel,html[data-theme="dark"] .result-status,html[data-theme="dark"] .total,html[data-theme="dark"] .modal,html[data-theme="dark"] .modal-content{background:#182231!important;color:#edf2fa!important;border-color:#344357!important}
 html[data-theme="dark"] .scorer-market,html[data-theme="dark"] .bet-market,html[data-theme="dark"] .live-combo-score{background:#173b34!important;color:#b9f5dc!important;border-color:#295a4b!important}
@@ -473,6 +488,7 @@ if(comboSection&&livePanel&&comboHost){
   const body=document.createElement('div');body.className='combo-main-tile-body';
   if(panel===comboSection){body.append(...Array.from(comboHost.childNodes).filter(n=>n!==livePanel));comboSection.remove();details.append(body);}
   else{body.append(panel);details.append(body);}
+  details.addEventListener('toggle',()=>{if(details.open){for(const other of comboCategories.querySelectorAll('details.combo-main-tile'))if(other!==details)other.open=false}});
   comboCategories.append(details);
  }
 }
