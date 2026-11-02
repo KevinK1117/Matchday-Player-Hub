@@ -1,0 +1,61 @@
+workflows:
+  ios-preview-unsigned:
+    name: Matchday Pro - iOS simulator preview
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      node: 22
+      xcode: latest
+      vars:
+        VITE_APP_MODE: preview
+    scripts:
+      - name: Prepare bundled iOS app
+        script: |
+          cd "$CM_BUILD_DIR/mobile"
+          npm ci
+          npm run build
+          npx cap add ios
+          npx cap sync ios
+      - name: Build simulator app
+        script: |
+          cd "$CM_BUILD_DIR/mobile"
+          xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+    artifacts:
+      - mobile/build/Build/Products/Debug-iphonesimulator/*.app
+  ios-testflight-preview:
+    name: Matchday Pro - signed iPhone preview
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: matchday-apple
+    environment:
+      node: 22
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.matchdaypro.app
+      vars:
+        VITE_APP_MODE: preview
+    scripts:
+      - name: Prepare bundled iOS app
+        script: |
+          cd "$CM_BUILD_DIR/mobile"
+          npm ci
+          npm run build
+          npx cap add ios
+          npx cap sync ios
+      - name: Apply signing and build number
+        script: |
+          cd "$CM_BUILD_DIR/mobile/ios/App"
+          xcode-project use-profiles
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Build signed IPA
+        script: |
+          cd "$CM_BUILD_DIR/mobile"
+          xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App
+    artifacts:
+      - mobile/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    # No automatic upload or App Store release. Connect signing first and review
+    # the preview build; TestFlight publishing can then be configured explicitly.
