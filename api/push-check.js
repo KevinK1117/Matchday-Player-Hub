@@ -1,3 +1,4 @@
+import {liveTipMessage} from '../lib/push-message.js';
 import {watches,wantsLiveTip} from '../lib/push-events.js';
 import {favoriteSignals} from '../lib/favorite-push.js';
 import {redis,configurePush,sendPush} from './push.js';
@@ -29,7 +30,7 @@ export default async function handler(req,res){
     if(sport==='football'){const minute=Number(g.fixture?.status?.elapsed);signal=Number.isFinite(minute)&&((minute>=40&&minute<=45&&['1H','LIVE','IN'].includes(status))||(minute>=80&&minute<=88&&['2H','LIVE','IN'].includes(status)));label=(minute>=80?'Spätes Tor':'Weiteres Tor')+' · '+minute+'. Minute · Über '+(Number(score.home)+Number(score.away))+',5 Tore'+(minute<80?' 1. HZ':' Gesamtspiel')}
     else if(status==='LIVE'){const period=await nhlPeriod(id).catch(()=>0);signal=period===3;label='Spätes Tor · 3. Drittel · Über '+(Number(score.home)+Number(score.away))+',5 Tore'}
     if(!signal)continue;
-    signals.push({sport,id:sport+':'+id+':'+(sport==='football'?(Number(g.fixture?.status?.elapsed)<80?'first-half':'late-game'):'third-period'),title:'Matchday PRO · Live-Tipp',body:home+' – '+away+' · '+score.home+':'+score.away+' · '+label,url:origin+'/matchcenter'});
+    signals.push({sport,id:sport+':'+id+':'+(sport==='football'?(Number(g.fixture?.status?.elapsed)<80?'first-half':'late-game'):'third-period'),...liveTipMessage(g,sport,label),url:origin+'/matchcenter'});
    }
   }catch(e){errors.push(sport+': '+e.message)}
  }
