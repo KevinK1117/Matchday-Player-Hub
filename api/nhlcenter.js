@@ -1,3 +1,5 @@
+import {nhlTeamHistory} from '../lib/player-history.js';
+import {nhlReference} from '../lib/lineup-reference.js';
 import {nhlClock} from '../public/match-clock.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
 import {fetchJson,value,fetchBerlinSchedule} from './nhl.js';
@@ -5,9 +7,9 @@ const ended=g=>['FINAL','OFF'].includes(g.gameState);
 export function normalizeGame(g){const team=t=>({id:t?.id,name:value(t?.placeName)&&value(t?.commonName)?value(t.placeName)+' '+value(t.commonName):value(t?.name)||t?.abbrev||'Team',logo:t?.abbrev?`https://assets.nhle.com/logos/nhl/svg/${t.abbrev}_light.svg`:null,abbrev:t?.abbrev});return {fixture:{id:g.id,date:g.startTimeUTC,status:{short:ended(g)?'FT':['LIVE','CRIT'].includes(g.gameState)?'LIVE':['FUT','PRE'].includes(g.gameState)?'NS':g.gameState,elapsed:null,clock:nhlClock(g)},venue:{name:value(g.venue)}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:Number(String(g.season||'').slice(0,4))||new Date(g.startTimeUTC).getUTCFullYear()},teams:{home:team(g.homeTeam),away:team(g.awayTeam)},goals:{home:g.homeTeam?.score??null,away:g.awayTeam?.score??null},sport:'nhl'};}
 export default async function handler(req,res){
  res.setHeader('Cache-Control',String(req.query?.action||'')==='lineups'?'no-store, max-age=0':'s-maxage=60, stale-while-revalidate=60');const q=req.query||{},a=q.action||'fixtures';
- if(!['fixtures','clock','detail','table','player','squad','scorers','lineups','del','del-detail','ice-del-detail'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
+ if(!['fixtures','clock','detail','table','player','squad','scorers','lineup-reference','lineups','del','del-detail','ice-del-detail'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
  if(['fixtures','del'].includes(a)&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
- if(['clock','detail','lineups','player','del-detail'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
+ if(['clock','detail','lineup-reference','lineups','player','del-detail'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
  if(a==='squad'&&!/^[A-Z]{3}$/.test(String(q.team||'')))return res.status(400).json({error:'Ungültiges NHL-Team'});
  try{let data;
  if(a==='clock')data=normalizeGame(await fetchJson('/gamecenter/'+q.id+'/boxscore'));
@@ -129,8 +131,20 @@ export default async function handler(req,res){
   if(roster.status==='rejected'&&stats.status==='rejected')throw Error('NHL-Spielerkader nicht verfügbar');
   data=[...people.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
  }
- if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
- if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);data={...p,last5Games:recent,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
+ if(a==='scorers'){
+ const leaders=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');
+ const clubs=[...new Set((leaders.goals||[]).map(p=>p.teamAbbrev).filter(Boolean))],stats=new Map();let next=0;
+ await Promise.all(Array.from({length:2},async()=>{while(next<clubs.length){const club=clubs[next++];try{const d=await fetchJson('/club-stats/'+club+'/now');for(const p of d.skaters||[])stats.set(String(p.playerId),{...p,club})}catch{}}}));
+ data=(leaders.goals||[]).map(p=>{const st=stats.get(String(p.id)),gp=st?.gamesPlayed,goals=st?.goals??p.value,shots=st?.shots;
+ return {player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:goals}}],modelPlayer:{id:p.id,name:value(p.firstName)+' '+value(p.lastName),photo:p.headshot,team:p.teamAbbrev,position:st?.positionCode,GP:gp??null,goals,shots:shots??null,shotsPerGame:gp>0&&shots!=null?shots/gp:null,participation:'Saisonmodell · kein Einsatz bestätigt'}};
+ }).filter(p=>['L','R','LW','RW'].includes(p.modelPlayer.position));
+ }
+ if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);let standings=[];try{standings=(await fetchJson('/standings/now')).standings||[]}catch{}data={...p,teamHistory:nhlTeamHistory(p,standings),last5Games:recent,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
+ if(a==='lineup-reference'){
+  const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
+  if(![box.homeTeam?.abbrev,box.awayTeam?.abbrev].includes(q.team))return res.status(400).json({error:'Team nicht im Spiel'});
+  data=await nhlReference(q.team,box.startTimeUTC,fetchJson);
+ }
  if(a==='lineups'){
   const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
   const stats=box.playerByGameStats||{};

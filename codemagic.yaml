@@ -14,7 +14,7 @@ workflows:
           cd "$CM_BUILD_DIR/mobile"
           npm ci
           npm run build
-          npx cap add ios
+          test -d ios || npx cap add ios
           npx cap sync ios
       - name: Build simulator app
         script: |
@@ -24,7 +24,7 @@ workflows:
     artifacts:
       - mobile/build/Build/Products/Debug-iphonesimulator/*.app
   ios-testflight-preview:
-    name: Matchday Pro - signed iPhone preview
+    name: Matchday Pro - TestFlight iPhone preview
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
@@ -43,13 +43,13 @@ workflows:
           cd "$CM_BUILD_DIR/mobile"
           npm ci
           npm run build
-          npx cap add ios
+          test -d ios || npx cap add ios
           npx cap sync ios
       - name: Apply signing and build number
         script: |
           cd "$CM_BUILD_DIR/mobile/ios/App"
           xcode-project use-profiles
-          agvtool new-version -all "$BUILD_NUMBER"
+          agvtool new-version -all "$(date +%s)"
       - name: Build signed IPA
         script: |
           cd "$CM_BUILD_DIR/mobile"
@@ -57,5 +57,9 @@ workflows:
     artifacts:
       - mobile/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-    # No automatic upload or App Store release. Connect signing first and review
-    # the preview build; TestFlight publishing can then be configured explicitly.
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Upload for internal testing; do not invite testers or submit review.
+        submit_to_testflight: false
+        submit_to_app_store: false
