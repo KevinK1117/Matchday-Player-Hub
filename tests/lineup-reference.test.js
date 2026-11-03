@@ -25,3 +25,13 @@ test('combo excludes centers even with a stronger ranking',async()=>{
  const players=[{...base,id:1,lineupPosition:'C',score:100},{...base,id:2,lineupPosition:'L',score:1},{...base,id:3,lineupPosition:'R',score:2},{...base,id:4,position:'R',lineupSource:null,score:3}];
  assert.deepEqual(rankScorers(games,players,6,now).picks.map(x=>x.player.id),[3,2]);
 });
+
+test('explicit season fallback retains wings and forwards without admitting centers',async()=>{
+ const {rankScorers}=await import('../public/combo.js');const now=Date.now();
+ const games=[{fixture:{id:1,date:new Date(now+3600000).toISOString(),status:{short:'NS'}}}];
+ const base={name:'Wing',sport:'nhl',fixtureId:1,GP:16,goals:8,shotsPerGame:3,lineupSource:'season',participation:'Aufstellung offen · Saisonposition'};
+ assert.equal(scorerRole({...base,lineupPosition:'L'},'nhl'),true);
+ const candidates=[{...base,id:1,lineupPosition:'L'},{...base,id:2,lineupPosition:'C'}];
+ assert.deepEqual(rankScorers(games,candidates,6,now).picks.map(r=>r.player.id),[1]);
+ assert.equal(rankScorers(games,candidates,6,now,true).picks.length,0);
+});

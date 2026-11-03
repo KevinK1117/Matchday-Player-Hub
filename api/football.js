@@ -34,7 +34,7 @@ const chosen=new Set(leagueIds);
 const games=relevant.filter(g=>chosen.has(g.leagueId));
 if(!games.length)return res.status(200).json({configured:true,games:[],players:[],allPlayers:[],coverage:[],eligible:0,notice:'Keine kommenden Spiele für die ausgewählte Liga am gewählten Tag.',updatedAt:new Date().toISOString()});
 // Top scorers are competition-specific historical season stats, not fixture-confirmed lineups.
-const cupGames=games.filter(g=>g.leagueId===81||g.leagueId===82||/dfb.?pokal/i.test(g.league));
+const cupGames=games.filter(g=>[2,3,81,82].includes(g.leagueId)||/champions league|europa league|dfb.?pokal/i.test(g.league));
 const cupTeams=new Set(cupGames.flatMap(g=>[Number(g.homeId),Number(g.awayId)]));
 const sets=new Map();for(const g of games)sets.set(g.leagueId+':'+g.season,{league:g.leagueId,season:g.season});
 // DFB-Pokal often has too few appearances for reliable scorer statistics.
@@ -47,7 +47,7 @@ for(const r of results)if(r.status==='fulfilled')for(const item of r.value.rows)
 // Additional team-stat pages are limited and spread across selected competitions.
 const missingTeams=new Map();
 for(const g of games)for(const id of [g.homeId,g.awayId]){
- if(!representedTeams.has(Number(id))&&!missingTeams.has(id))missingTeams.set(id,{team:id,league:g.leagueId,season:g.season});
+ if((!representedTeams.has(Number(id))||cupTeams.has(Number(id)))&&!missingTeams.has(id))missingTeams.set(id,{team:id,league:g.leagueId,season:g.season});
 }
 // Rotate extra squad requests across leagues rather than letting fixture order
 // exhaust the allowance before major leagues are reached.
@@ -74,9 +74,9 @@ while(missingSelection.length<maxTeamLookups&&leagueOrder.some(id=>buckets.get(i
 if(missingSelection.length){
  const requests=[];
  for(const {team,league,season} of missingSelection){
-  const sourceLeagues=cupTeams.has(Number(team))?[78,79,80]:[league];
+  const sourceLeagues=cupTeams.has(Number(team))?[null]:[league];
   for(const sourceLeague of sourceLeagues){
-   requests.push(api('/players?team='+team+'&league='+sourceLeague+'&season='+season+'&page=1',key).then(rows=>({league:sourceLeague,rows})));
+   requests.push(api('/players?team='+team+(sourceLeague?'&league='+sourceLeague:'')+'&season='+season+'&page=1',key).then(rows=>({league:sourceLeague,rows})));
   }
  }
  const extra=await Promise.allSettled(requests);
@@ -102,7 +102,7 @@ for(const result of h2hResults){
  const superiorTeamId=finished.length>=3&&homeWins!==awayWins?(homeWins>awayWins?Number(homeId):Number(awayId)):null;
  h2hByFixture.set(id,{played:finished.length,homeWins,awayWins,draws,superiorTeamId});
 }
-const playerByKey=new Map();for(const result of results){if(result.status!=='fulfilled')continue;const {league,rows}=result.value;for(const item of rows){for(const stat of item.statistics||[]){const matching=games.filter(g=>(g.leagueId===league||cupTeams.has(Number(stat.team?.id))&&cupGames.some(c=>c.id===g.id))&&(g.homeId===stat.team?.id||g.awayId===stat.team?.id));if(!matching.length)continue;const played=Number(stat.games?.appearences||0),minutes=Number(stat.games?.minutes||0),goals=Number(stat.goals?.total||0),shots=stat.shots?.on==null?null:Number(stat.shots.on),penalties=Number(stat.penalty?.scored||0);if(!played)continue;for(const g of matching){const k=g.id+':'+item.player.id;const player={id:item.player.id,name:item.player.name,team:stat.team.name,teamId:stat.team.id,position:stat.games?.position||null,opponent:g.homeId===stat.team.id?g.away:g.home,fixtureId:g.id,league:g.league,statisticsLeagueId:league,statisticsSource:league===g.leagueId?'Wettbewerbsstatistik':'Ligastatistik als DFB-Pokal-Grundlage',goals,appearances:played,minutes,minutesPerGame:minutes/played,goalsPerGame:goals/played,totalShots:stat.shots?.total??null,shotsPerGame:shots===null?null:shots/played,penaltyGoals:penalties,xG:null,xG90:null,participation:'Nicht bestätigt',photo:item.player.photo,score:(goals/played)*5+(shots===null?0:shots/played)*1.7+(minutes/played)/90+penalties*.04};if(!playerByKey.has(k)||playerByKey.get(k).appearances<player.appearances)playerByKey.set(k,player)}}}}
+const playerByKey=new Map();for(const result of results){if(result.status!=='fulfilled')continue;const {league,rows}=result.value;for(const item of rows){for(const stat of item.statistics||[]){const matching=games.filter(g=>(g.leagueId===league||cupTeams.has(Number(stat.team?.id))&&cupGames.some(c=>c.id===g.id))&&(g.homeId===stat.team?.id||g.awayId===stat.team?.id));if(!matching.length)continue;const played=Number(stat.games?.appearences||0),minutes=Number(stat.games?.minutes||0),goals=Number(stat.goals?.total||0),shots=stat.shots?.on==null?null:Number(stat.shots.on),penalties=Number(stat.penalty?.scored||0);if(!played)continue;for(const g of matching){const k=g.id+':'+item.player.id;const player={id:item.player.id,name:item.player.name,team:stat.team.name,teamId:stat.team.id,position:stat.games?.position||null,opponent:g.homeId===stat.team.id?g.away:g.home,fixtureId:g.id,league:g.league,statisticsLeagueId:stat.league?.id||league,statisticsSource:(stat.league?.id||league)===g.leagueId?'Wettbewerbsstatistik':'Ligastatistik als Pokal-/Europapokal-Grundlage',goals,appearances:played,minutes,minutesPerGame:minutes/played,goalsPerGame:goals/played,totalShots:stat.shots?.total??null,shotsPerGame:shots===null?null:shots/played,penaltyGoals:penalties,xG:null,xG90:null,participation:'Nicht bestätigt',photo:item.player.photo,score:(goals/played)*5+(shots===null?0:shots/played)*1.7+(minutes/played)/90+penalties*.04};if(!playerByKey.has(k)||playerByKey.get(k).appearances<player.appearances)playerByKey.set(k,player)}}}}
 // Official lineups are returned only when the provider has published them.
 const lineupCandidates=games.filter(g=>{
  const gap=Date.parse(g.start)-Date.now();
@@ -126,7 +126,7 @@ for(const p of playerByKey.values()){
  const current=lineups.get(p.fixtureId)?.sides.find(s=>Number(s.teamId)===Number(p.teamId)&&s.starters.length===11);
  const ref=references.get(p.teamId);
  const slot=current?current.starters.find(s=>String(s.id)===String(p.id)):ref?.side.startXI.find(s=>String(s.player?.id)===String(p.id))?.player;
- p.lineupPosition=slot?.position||slot?.pos||null;p.lineupSource=current?'current':ref?'last':null;
+ p.lineupPosition=slot?.position||slot?.pos||(!current&&!ref?p.position:null);p.lineupSource=current?'current':ref?'last':'season';
  p.lineupReferenceDate=current?null:ref?.date||null;
  if(!scorerRole(p,'football'))p.exclusionReason='Kein Stürmer in verfügbarer Aufstellung';
 }

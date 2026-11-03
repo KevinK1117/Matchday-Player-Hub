@@ -130,7 +130,14 @@ export default async function handler(req,res){
   if(roster.status==='rejected'&&stats.status==='rejected')throw Error('NHL-Spielerkader nicht verfügbar');
   data=[...people.values()].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
  }
- if(a==='scorers'){const rows=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');data=(rows.goals||[]).map(p=>({player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:p.value}}]}))}
+ if(a==='scorers'){
+ const leaders=await fetchJson('/skater-stats-leaders/current?categories=goals&limit=30');
+ const clubs=[...new Set((leaders.goals||[]).map(p=>p.teamAbbrev).filter(Boolean))],stats=new Map();let next=0;
+ await Promise.all(Array.from({length:2},async()=>{while(next<clubs.length){const club=clubs[next++];try{const d=await fetchJson('/club-stats/'+club+'/now');for(const p of d.skaters||[])stats.set(String(p.playerId),{...p,club})}catch{}}}));
+ data=(leaders.goals||[]).map(p=>{const st=stats.get(String(p.id)),gp=st?.gamesPlayed,goals=st?.goals??p.value,shots=st?.shots;
+ return {player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:goals}}],modelPlayer:{id:p.id,name:value(p.firstName)+' '+value(p.lastName),photo:p.headshot,team:p.teamAbbrev,position:st?.positionCode,GP:gp??null,goals,shots:shots??null,shotsPerGame:gp>0&&shots!=null?shots/gp:null,participation:'Saisonmodell · kein Einsatz bestätigt'}};
+ }).filter(p=>['L','R','LW','RW'].includes(p.modelPlayer.position));
+ }
  if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);data={...p,last5Games:recent,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
  if(a==='lineup-reference'){
   const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
