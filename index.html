@@ -494,7 +494,7 @@ function nhlLineSelector(team,forwards,defense,goalies,season,confirmed=false,re
  const groups=buildNhlLines(forwards,defense,roster).map((g,i)=>({...g,label:'Reihe '+(i+1)}));
  const row=(players,labels)=>'<div class="pitch-line">'+players.map((p,i)=>p?lineupCard(p,'nhl',season,team.abbrev):'<span class="pitch-person muted">'+labels[i]+'<small>Nicht verfügbar</small></span>').join('')+'</div>';
  const goalie=goalies.find(p=>p.starter===true)||goalies.find(p=>p.toi&&p.toi!=='00:00')||goalies[0];
- return '<section class="lineup-preview nhl-line-selector"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+(referenceDate?'ORIENTIERUNG · LETZTES SPIEL':confirmed?'SPIELKADER BESTÄTIGT':'KADER-VORSCHAU')+'</span></div></div><p class="muted lineup-notice">'+(referenceDate?'Spielbericht vom '+new Date(referenceDate).toLocaleDateString('de-DE')+'. ':'')+'Reihen und Abwehrpaare sind nicht bestätigt. Freie Plätze werden aus dem Kader ergänzt und markiert. Torhüter aus dem Spielbericht, keine Startbestätigung.</p><div class="nhl-line-tabs" role="tablist" aria-label="Aufstellung '+esc(team.name)+'">'+groups.map((group,i)=>'<button type="button" class="pill '+(i===0?'active':'')+'" role="tab" aria-selected="'+(i===0)+'" data-nhl-line="'+i+'">'+group.label+'</button>').join('')+'</div>'+groups.map((group,i)=>'<div class="nhl-line-panel" role="tabpanel" aria-label="'+group.label+'" '+(i?'hidden':'')+'><div class="section-label">'+group.label+' · Orientierung</div><div class="pitch" data-sport="nhl">'+row(group.forwards,['Außen','Center','Außen'])+row(group.defense,['Abwehr','Abwehr'])+row([goalie],['Torhüter'])+'</div></div>').join('')+'</section>';
+ return '<section class="lineup-preview nhl-line-selector"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+(referenceDate?'ORIENTIERUNG · LETZTES SPIEL':confirmed?'✓ SPIELKADER BESTÄTIGT':'KADER-VORSCHAU')+'</span></div></div><p class="muted lineup-notice">'+(referenceDate?'Spielbericht vom '+new Date(referenceDate).toLocaleDateString('de-DE')+'. ':'')+'Reihen und Abwehrpaare sind nicht bestätigt. Freie Plätze werden aus dem Kader ergänzt und markiert. Torhüter aus dem Spielbericht, keine Startbestätigung.</p><div class="nhl-line-tabs" role="tablist" aria-label="Aufstellung '+esc(team.name)+'">'+groups.map((group,i)=>'<button type="button" class="pill '+(i===0?'active':'')+'" role="tab" aria-selected="'+(i===0)+'" data-nhl-line="'+i+'">'+group.label+'</button>').join('')+'</div>'+groups.map((group,i)=>'<div class="nhl-line-panel" role="tabpanel" aria-label="'+group.label+'" '+(i?'hidden':'')+'><div class="section-label">'+group.label+' · Orientierung</div><div class="pitch" data-sport="nhl">'+row(group.forwards,['Außen','Center','Außen'])+row(group.defense,['Abwehr','Abwehr'])+row([goalie],['Torhüter'])+'</div></div>').join('')+'</section>';
 }
 function projectedNhl(rows,team,season){
  const grouped={G:[],D:[],F:[]};
@@ -508,7 +508,7 @@ function confirmedFootballSide(g,team,side){
  for(const p of xi){const v=Number(String(p.player?.grid||'').split(':')[0]);if(v>0){if(!byRow.has(v))byRow.set(v,[]);byRow.get(v).push(p)}}
  const lines=byRow.size?[...byRow.keys()].sort((a,b)=>b-a).map(k=>byRow.get(k))
   :[xi.slice(8,11),xi.slice(4,8),xi.slice(1,4),xi.slice(0,1)];
- return pitchView(team,lines,'football',g.league.season,'STARTELF BESTÄTIGT · '+(side.formation||'Formation offen'),'Offizielle Startelf gemäß API-Sports. Spielerbilder öffnen das jeweilige Profil.');
+ return pitchView(team,lines,'football',g.league.season,'✓ STARTELF BESTÄTIGT · '+(side.formation||'Formation offen'),'Offizielle Startelf gemäß API-Sports. Spielerbilder öffnen das jeweilige Profil.');
 }
 function confirmedNhlSide(g,team,stats,referenceDate=null,roster=[]){
  if(!stats)return null;
@@ -560,7 +560,7 @@ async function showProjectedLineups(g,teamSport,host){
   if(!ref?.side)return '<div class="empty">Für '+esc(t.name)+' ist keine aktuelle oder letzte Aufstellung verfügbar.</div>';
   if(teamSport==='nhl')return confirmedNhlSide(g,t,ref.side,ref.date);
   const html=confirmedFootballSide(g,t,ref.side);
-  return html?html.replace(/STARTELF BESTÄTIGT/g,'LETZTES SPIEL · '+new Date(ref.date).toLocaleDateString('de-DE')).replace('Offizielle Startelf gemäß API-Sports.','Aufstellung des letzten Spiels als Orientierung; aktueller Einsatz nicht bestätigt.'):'<div class="empty">Letzte Aufstellung unvollständig.</div>';
+  return html?html.replace(/(?:✓ )?STARTELF BESTÄTIGT/g,'LETZTES SPIEL · '+new Date(ref.date).toLocaleDateString('de-DE')).replace('Offizielle Startelf gemäß API-Sports.','Aufstellung des letzten Spiels als Orientierung; aktueller Einsatz nicht bestätigt.'):'<div class="empty">Letzte Aufstellung unvollständig.</div>';
  }).join('')+'</div>';
 }
 function confirmedFootballLineups(g){
@@ -928,7 +928,7 @@ function kickoffDistance(g){return Date.parse(g?.fixture?.date||'')-Date.now()}
 async function checkOneLineup(g,force=false){
  if(demoMode||!g?.fixture?.id)return;
  const id=String(g.fixture.id),now=Date.now(),previous=lineupCheckTimes.get(id)||0;
- if(now-previous<(force?120000:14*60000))return;
+ if(now-previous<(force?30000:60000))return;
  lineupCheckTimes.set(id,now);
  const gameSport=g.sport||sport;
  try{
@@ -970,7 +970,7 @@ async function refreshKickoffWindow(force=false){
  if(force&&visible&&current&&!upcoming.some(g=>String(g.fixture.id)===String(current.fixture.id)))
   upcoming.unshift(current);
  upcoming.sort((a,b)=>Number(visible&&a.fixture.id===current?.fixture?.id)-Number(visible&&b.fixture.id===current?.fixture?.id)?Number(visible&&b.fixture.id===current?.fixture?.id)-Number(visible&&a.fixture.id===current?.fixture?.id):Math.abs(kickoffDistance(a))-Math.abs(kickoffDistance(b)));
- const due=upcoming.filter(g=>Date.now()-(lineupCheckTimes.get(String(g.fixture.id))||0)>(force?120000:14*60000)).slice(0,3);
+ const due=upcoming.filter(g=>Date.now()-(lineupCheckTimes.get(String(g.fixture.id))||0)>(force?30000:60000)).slice(0,3);
  kickoffCheckBusy=true;
  try{await Promise.allSettled(due.map(g=>checkOneLineup(g,force)))}finally{kickoffCheckBusy=false}
  if(upcoming.length&&Date.now()-lastKickoffAnalysisAt>14*60000){
@@ -1014,7 +1014,7 @@ function rememberFavoriteFixture(id){const g=games.find(g=>Number(g.fixture?.id)
 function liveTipPreferences(){const legacy=localStorage.getItem('matchday-push-live-tips')!=='false';return Object.fromEntries(['football','nhl'].map(sp=>{const value=localStorage.getItem('matchday-push-live-'+sp);return [sp,value===null?legacy:value==='true']}))}
 function updateLivePushOptions(){const p=liveTipPreferences();document.querySelectorAll('[data-push-live-sport]').forEach(el=>el.checked=p[el.dataset.pushLiveSport])}
 function pushPreferences(){const gameRefs=new Map(favoriteFixtureRefs);for(const g of games)if(favorites.has(Number(g.fixture.id)))gameRefs.set(String(g.fixture.id),{id:g.fixture.id,sport:g.sport==='nhl'||g.league?.id===10000?'nhl':g.sport==='del'||g.league?.id===10001?'del':'football'});return {favoriteEvents:true,liveTipSports:liveTipPreferences(),games:[...gameRefs.values()].filter(g=>favorites.has(Number(g.id))),players:[...favoritePlayers.values()].filter(r=>r?.player&&r.sport).map(r=>({sport:r.sport,id:r.player.id,teamId:r.player.teamId,team:r.player.team||''}))}}
-const pushPanel=document.createElement('section');pushPanel.className='favorite-push-panel';pushPanel.innerHTML='<strong>🔔 Favoriten-Benachrichtigungen</strong><p>Fußball: Anpfiff, Tore mit Torschützen, Halbzeit und Abpfiff. NHL: Spielbeginn, Tore mit Torschützen, Drittelbeginn/-ende, Powerplay und Spielende. Für Spieler zählen die Spiele ihres gespeicherten Teams.</p><label><input type="checkbox" data-push-live-sport="football"> Fußball · Live-Kombi-Push</label><label><input type="checkbox" data-push-live-sport="nhl"> NHL · Live-Kombi-Push</label><button type="button" class="secondary" id="favoritePushToggle">Push aktivieren</button><p id="favoritePushStatus" aria-live="polite">Prüfung etwa alle 5 Minuten; Zustellung kann später erfolgen. iPhone: App zum Home-Bildschirm hinzufügen und dort öffnen. DEL-Ereignisse werden derzeit nicht unterstützt.</p>';$('favoritesPanel').querySelector('.home-heading').after(pushPanel);const livePushOptions=document.createElement('div');livePushOptions.className='live-push-options';livePushOptions.innerHTML='<label><input type="checkbox" data-push-live-sport="football"> ⚽ Fußball-Push</label><label><input type="checkbox" data-push-live-sport="nhl"> 🏒 NHL-Push</label>';$('pushToggle').before(livePushOptions);updateLivePushOptions();
+const pushPanel=document.createElement('section');pushPanel.className='favorite-push-panel';pushPanel.innerHTML='<strong>🔔 Favoriten-Benachrichtigungen</strong><p>Fußball: bestätigte Aufstellungen, Anpfiff, Tore mit Torschützen, Halbzeit und Abpfiff. NHL: bestätigter Spielkader, Spielbeginn, Tore mit Torschützen, Drittelbeginn/-ende, Powerplay und Spielende. Für Spieler zählen die Spiele ihres gespeicherten Teams.</p><label><input type="checkbox" data-push-live-sport="football"> Fußball · Live-Kombi-Push</label><label><input type="checkbox" data-push-live-sport="nhl"> NHL · Live-Kombi-Push</label><button type="button" class="secondary" id="favoritePushToggle">Push aktivieren</button><p id="favoritePushStatus" aria-live="polite">Prüfung etwa alle 5 Minuten; Zustellung kann später erfolgen. iPhone: App zum Home-Bildschirm hinzufügen und dort öffnen. DEL-Ereignisse werden derzeit nicht unterstützt.</p>';$('favoritesPanel').querySelector('.home-heading').after(pushPanel);const livePushOptions=document.createElement('div');livePushOptions.className='live-push-options';livePushOptions.innerHTML='<label><input type="checkbox" data-push-live-sport="football"> ⚽ Fußball-Push</label><label><input type="checkbox" data-push-live-sport="nhl"> 🏒 NHL-Push</label>';$('pushToggle').before(livePushOptions);updateLivePushOptions();
 function pushStatus(message,enabled){$('pushStatus').textContent=message;$('favoritePushStatus').textContent=message;if(enabled!==undefined){$('pushToggle').textContent=enabled?'🔕 Push deaktivieren':'🔔 Push aktivieren';$('favoritePushToggle').textContent=enabled?'Push deaktivieren':'Push aktivieren'}}
 async function savePushPreferences(sub){const response=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:sub,preferences:pushPreferences()})});if(!response.ok)throw Error((await response.json()).error||'Push-Einstellungen konnten nicht gespeichert werden')}
 let pushSyncPending=false,pushSyncRunning=false;
