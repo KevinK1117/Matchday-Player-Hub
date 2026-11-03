@@ -466,10 +466,9 @@ function projectedFootball(rows,team,season){
  return pitchView(team,order,'football',season,'Unbestätigte Positionsvorschau','Keine offizielle Startelf. Nur positionsbasierte Kaderauswahl – keine Prognose der tatsächlichen Einsatzwahrscheinlichkeit.');
 }
 function nhlPosition(p){const x=String(p.positionCode||p.position||'').toUpperCase();return x==='G'?'G':x==='D'?'D':['C','L','R','LW','RW'].includes(x)?'F':'?'}
-function nhlLineSelector(team,forwards,defense,goalies,season,confirmed=false){
- const groups=[...Array.from({length:4},(_,i)=>({label:'Reihe '+(i+1),players:forwards.slice(i*3,i*3+3),preview:true})),{label:'Abwehr',players:defense},{label:'Torhüter',players:goalies}];
- if(forwards.length>12)groups.push({label:'Weitere',players:forwards.slice(12)});
- return '<section class="lineup-preview nhl-line-selector"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+(confirmed?'SPIELKADER BESTÄTIGT':'KADER-VORSCHAU')+'</span></div></div><p class="muted lineup-notice">Reihen-Vorschau: Spieler in Dreiergruppen, keine bestätigten NHL-Reihen. Abwehr und Torhüter separat; kein Starttorhüter bestätigt.</p><div class="nhl-line-tabs" role="tablist" aria-label="Aufstellung '+esc(team.name)+'">'+groups.map((group,i)=>'<button type="button" class="pill '+(i===0?'active':'')+'" role="tab" aria-selected="'+(i===0)+'" data-nhl-line="'+i+'">'+group.label+'</button>').join('')+'</div>'+groups.map((group,i)=>'<div class="nhl-line-panel" role="tabpanel" aria-label="'+group.label+'" '+(i?'hidden':'')+'><div class="section-label">'+group.label+(group.preview?' · unbestätigte Vorschau':'')+'</div><div class="pitch" data-sport="nhl">'+(group.players.length?Array.from({length:Math.ceil(group.players.length/3)},(_,j)=>pitchRow(group.players.slice(j*3,j*3+3),'nhl',season,team.abbrev)).join(''):'<p class="empty">Keine Spieler verfügbar.</p>')+'</div></div>').join('')+'</section>';
+function nhlLineSelector(team,forwards,defense,goalies,season,confirmed=false,referenceDate=null){
+ const groups=Array.from({length:4},(_,i)=>({label:'Reihe '+(i+1),forwards:forwards.slice(i*3,i*3+3),defense:defense.slice(Math.min(i,2)*2,Math.min(i,2)*2+2)}));
+ return '<section class="lineup-preview nhl-line-selector"><div class="lineup-preview-title">'+crest(team)+'<div><h3>'+esc(team.name)+'</h3><span class="lineup-status">'+(referenceDate?'ORIENTIERUNG · LETZTES SPIEL':confirmed?'SPIELKADER BESTÄTIGT':'KADER-VORSCHAU')+'</span></div></div><p class="muted lineup-notice">'+(referenceDate?'Spielbericht vom '+new Date(referenceDate).toLocaleDateString('de-DE')+'. ':'')+'Reihen und Abwehrpaare sind nicht bestätigt. Torhüter aus dem Spielbericht, keine Startbestätigung.</p><div class="nhl-line-tabs" role="tablist" aria-label="Aufstellung '+esc(team.name)+'">'+groups.map((group,i)=>'<button type="button" class="pill '+(i===0?'active':'')+'" role="tab" aria-selected="'+(i===0)+'" data-nhl-line="'+i+'">'+group.label+'</button>').join('')+'</div>'+groups.map((group,i)=>'<div class="nhl-line-panel" role="tabpanel" aria-label="'+group.label+'" '+(i?'hidden':'')+'><div class="section-label">'+group.label+' · Orientierung</div><div class="pitch" data-sport="nhl">'+pitchRow(goalies,'nhl',season,team.abbrev)+pitchRow(group.defense,'nhl',season,team.abbrev)+pitchRow(group.forwards,'nhl',season,team.abbrev)+'</div></div>').join('')+'</section>';
 }
 function projectedNhl(rows,team,season){
  const grouped={G:[],D:[],F:[]};
@@ -485,12 +484,12 @@ function confirmedFootballSide(g,team,side){
   :[xi.slice(8,11),xi.slice(4,8),xi.slice(1,4),xi.slice(0,1)];
  return pitchView(team,lines,'football',g.league.season,'STARTELF BESTÄTIGT · '+(side.formation||'Formation offen'),'Offizielle Startelf gemäß API-Sports. Spielerbilder öffnen das jeweilige Profil.');
 }
-function confirmedNhlSide(g,team,stats){
+function confirmedNhlSide(g,team,stats,referenceDate=null){
  if(!stats)return null;
  const convert=(p,pos)=>({...p,playerId:p.playerId||p.id,name:typeof p.name==='string'?p.name:p.name?.default||[p.firstName?.default,p.lastName?.default].filter(Boolean).join(' '),positionCode:p.positionCode||pos,headshot:p.headshot||null});
  const f=(stats.forwards||[]).map(p=>convert(p,'F')),d=(stats.defense||[]).map(p=>convert(p,'D')),goalies=(stats.goalies||[]).map(p=>convert(p,'G'));
  if(f.length<9||d.length<4||goalies.length<1)return null;
- return nhlLineSelector(team,f,d,goalies,g.league.season,true);
+ return nhlLineSelector(team,f,d,goalies,g.league.season,true,referenceDate);
 }
 function lineupForTeam(g,team,teamSport){
  if(teamSport==='football')return confirmedFootballSide(g,team,(detail.lineups?.data||[]).find(x=>String(x.team?.id)===String(team.id)));
@@ -509,15 +508,17 @@ async function showProjectedLineups(g,teamSport,host){
  const missing=sides.map((_,i)=>confirmed[i]?null:i).filter(v=>v!==null);
  if(!missing.length){host.innerHTML='<div class="lineup-preview-grid">'+confirmed.join('')+'</div>';return}
  host.innerHTML='<div class="loading">Aufstellungen und Spielerbilder werden geprüft …</div>';
- const results=await Promise.allSettled(missing.map(i=>get(teamSport==='nhl'?{action:'squad',team:sides[i].abbrev}:{action:'squad',id:sides[i].id,season:g.league.season},teamSport)));
+ const results=await Promise.allSettled(missing.map(i=>get(teamSport==='nhl'?{action:'lineup-reference',id,team:sides[i].abbrev}:{action:'lineup-reference',id,team:sides[i].id},teamSport)));
  if(token!==modalToken||tab!=='lineups'||detail?.fixture?.fixture?.id!==id||!host.isConnected)return;
  const extra=new Map(missing.map((v,i)=>[v,results[i]]));
  host.innerHTML='<div class="lineup-preview-grid">'+sides.map((t,i)=>{
   const official=lineupForTeam(g,t,teamSport);if(official)return official;
   const r=extra.get(i);
-  return r?.status==='fulfilled'&&Array.isArray(r.value.data)?
-   teamSport==='nhl'?projectedNhl(r.value.data,t,g.league.season):projectedFootball(r.value.data,t,g.league.season):
-   '<div class="empty">Für '+esc(t.name)+' ist noch keine verlässliche Aufstellung verfügbar.</div>';
+  const ref=r?.status==='fulfilled'?r.value.data:null;
+  if(!ref?.side)return '<div class="empty">Für '+esc(t.name)+' ist keine aktuelle oder letzte Aufstellung verfügbar.</div>';
+  if(teamSport==='nhl')return confirmedNhlSide(g,t,ref.side,ref.date);
+  const html=confirmedFootballSide(g,t,ref.side);
+  return html?html.replace(/STARTELF BESTÄTIGT/g,'LETZTES SPIEL · '+new Date(ref.date).toLocaleDateString('de-DE')).replace('Offizielle Startelf gemäß API-Sports.','Aufstellung des letzten Spiels als Orientierung; aktueller Einsatz nicht bestätigt.'):'<div class="empty">Letzte Aufstellung unvollständig.</div>';
  }).join('')+'</div>';
 }
 function confirmedFootballLineups(g){
@@ -532,7 +533,7 @@ function confirmedFootballLineups(g){
  }).join('')+'</div>';
 }
 function history(rows,team){if(!rows?.length)return '<div class="empty">Keine abgeschlossenen Spiele verfügbar.</div>';return rows.map(g=>{const own=team?(g.teams.home.id===team?g.goals.home:g.goals.away):null,other=team?(g.teams.home.id===team?g.goals.away:g.goals.home):null;return `<div class="history"><span class="muted">${new Date(g.fixture.date).toLocaleDateString('de-DE')}</span><span>${team&&String(g.teams.home.id)===String(team)?'<strong class="featured-team">'+esc(g.teams.home.name)+'</strong>':esc(g.teams.home.name)} – ${team&&String(g.teams.away.id)===String(team)?'<strong class="featured-team">'+esc(g.teams.away.name)+'</strong>':esc(g.teams.away.name)}</span><strong>${fmt(g.goals.home)}:${fmt(g.goals.away)}</strong>${team?form(own===other?'D':own>other?'W':'L'):''}</div>`}).join('')}
-function positionBadge(p,nhl=false){const value=p.position||p.positionCode;const names=nhl?{C:'Center',L:'Linksaußen',LW:'Linksaußen',R:'Rechtsaußen',RW:'Rechtsaußen',D:'Verteidiger',G:'Torwart'}:{Attacker:'Sturm',Forward:'Sturm',Midfielder:'Mittelfeld',Defender:'Abwehr',Goalkeeper:'Torwart'};return '<span class="player-position">'+esc(names[value]||value||'Position nicht verfügbar')+'</span>'}
+function positionBadge(p,nhl=false){const value=p.lineupPosition||p.position||p.positionCode;const names=nhl?{C:'Center',L:'Linksaußen',LW:'Linksaußen',R:'Rechtsaußen',RW:'Rechtsaußen',D:'Verteidiger',G:'Torwart'}:{F:'Sturm',ST:'Sturm',CF:'Sturm',FW:'Sturm',Attacker:'Sturm',Forward:'Sturm',Midfielder:'Mittelfeld',Defender:'Abwehr',Goalkeeper:'Torwart'};return '<span class="player-position">'+esc(names[value]||value||'Position nicht verfügbar')+'</span>'+(p.lineupSource==='last'?'<small class="muted">Orientierung: letzte Aufstellung'+(p.lineupReferenceDate?' · '+new Date(p.lineupReferenceDate).toLocaleDateString('de-DE'):'')+'</small>':'')}
 function shotConversion(p,nhl){const shots=nhl?p.shots:p.totalShots,goals=p.goals;if(shots==null||goals==null||!Number.isFinite(Number(shots))||!Number.isFinite(Number(goals))||Number(shots)<=0||Number(goals)<0||Number(goals)>Number(shots))return '–';return (100*Number(goals)/Number(shots)).toFixed(1).replace('.',',')+' %'}
 function profileMetrics(entries){const grid=rows=>'<div class="metrics">'+rows.map(([label,value])=>'<div class="metric"><strong'+(value==='Nicht verfügbar'?' class="metric-unavailable"':'')+'>'+esc(fmt(value))+'</strong>'+esc(label)+'</div>').join('')+'</div>';return grid(entries.slice(0,6))+(entries.length>6?'<details class="profile-extra"><summary>Weitere Statistiken</summary>'+grid(entries.slice(6))+'</details>':'')}
 const playerEvidenceCache=new Map();let formJobs=[],formActive=0;
@@ -854,7 +855,7 @@ function homePlayerCard(row,i,sp=sport){const p=row.player,g=row.game,nhl=sp==='
 async function renderHome(){const token=++homeToken,key=homeKey();dashboard();if(homeCache.has(key)){paintHome(homeCache.get(key));return}$('homePlayers').innerHTML='<div class="loading">Spielerstatistiken werden geladen …</div>';try{const selectedGames=games.filter(g=>!league||g.league.id===league),upcoming=selectedGames.some(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>Date.now()+300000);let result;
  if(sport==='del'){result={rows:[],evaluated:0,seasonal:false,notice:'DEL-Torschützenstatistiken sind derzeit nicht angebunden.'}}
  else if(demoMode){const p={id:10001,name:'Demo-Torschütze',team:'Demo-Team',sport,goals:8,GP:12,shots:40,shotsPerGame:3.3,minutes:850,minutesPerGame:77,participation:'Demo · Einsatz nicht bestätigt'};result={rows:[{player:p,game:selectedGames[0]}],evaluated:1,seasonal:false}}
- else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?':'/api/football?')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){console.warn('Spieltag-Scorer-Abruf fehlgeschlagen, Saison-Fallback:',apiError);result=await seasonHome().catch(()=>({rows:[],evaluated:0,seasonal:false}));if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result);return;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length)result=await seasonHome().catch(()=>({rows:[],evaluated:0,seasonal:false}))}
+ else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?':'/api/football?')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){console.warn('Spieltag-Scorer-Abruf fehlgeschlagen, Saison-Fallback:',apiError);result={rows:[],evaluated:0,seasonal:false};if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result);return;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length)result.notice='Keine passenden Stürmer mit Aufstellungsdaten verfügbar.'}
  else {try{result=await seasonHome()}catch(err){console.warn('Scorer-Fallback nicht verfügbar',err);result={rows:[],evaluated:0,seasonal:false,notice:'Keine Torschützenstatistiken verfügbar.'}}}
  if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result)
  }catch(e){if(token!==homeToken||view!=='home')return;dashboard({error:true});$('homeSubtitle').textContent='Spielerstatistiken derzeit eingeschränkt';$('homePlayers').innerHTML=`<div class="empty card"><strong>Analyse konnte nicht geladen werden</strong>${esc(e.message)}<br><button class="secondary" id="retryHome">Erneut laden</button></div>`}}

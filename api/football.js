@@ -1,3 +1,4 @@
+import {footballReference,scorerRole} from '../lib/lineup-reference.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {isScorerCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
@@ -117,6 +118,18 @@ const lineupResults=await Promise.allSettled(lineupCandidates.map(async g=>{
   return {fixtureId:g.id,ids,confirmedTeams,published:confirmedTeams.size>0,sides:rows.map(side=>({teamId:side.team?.id,formation:side.formation||null,starters:(side.startXI||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos})),bench:(side.substitutes||[]).map(e=>({id:e.player?.id,name:e.player?.name,number:e.player?.number,position:e.player?.pos}))}))};
 }));
 const lineups=new Map(lineupResults.filter(x=>x.status==='fulfilled').map(x=>[x.value.fixtureId,x.value]));
+const references=new Map();
+const referenceTeams=[...new Set([...playerByKey.values()].map(p=>p.teamId))];
+let referenceNext=0;
+await Promise.all(Array.from({length:2},async()=>{while(referenceNext<referenceTeams.length){const team=referenceTeams[referenceNext++],game=games.find(g=>g.homeId===team||g.awayId===team);try{references.set(team,await footballReference(team,game.start,path=>api(path,key)))}catch{}}}));
+for(const p of playerByKey.values()){
+ const current=lineups.get(p.fixtureId)?.sides.find(s=>Number(s.teamId)===Number(p.teamId)&&s.starters.length===11);
+ const ref=references.get(p.teamId);
+ const slot=current?current.starters.find(s=>String(s.id)===String(p.id)):ref?.side.startXI.find(s=>String(s.player?.id)===String(p.id))?.player;
+ p.lineupPosition=slot?.position||slot?.pos||null;p.lineupSource=current?'current':ref?'last':null;
+ p.lineupReferenceDate=current?null:ref?.date||null;
+ if(!scorerRole(p,'football'))p.exclusionReason='Kein Stürmer in verfügbarer Aufstellung';
+}
 let injuries=[],injuriesAvailable=false,injuryError=null;
 try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}
 catch(e){injuryError=String(e.message||e).slice(0,80)}

@@ -1,3 +1,4 @@
+import {footballReference} from '../lib/lineup-reference.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import openliga from '../lib/openliga.js';
@@ -26,10 +27,10 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
  if(action==='openliga')return openliga(req,res);
- if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','lineup-reference','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['clock','detail','lineups','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['clock','detail','lineups','lineup-reference','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  const key=process.env.API_SPORTS_KEY;
@@ -79,6 +80,12 @@ export default async function handler(req,res){
    for(const page of pages)if(page.status==='fulfilled')for(const p of page.value)if(p.player?.id)roster.set(p.player.id,p);
   }
   data=[...roster.values()].sort((a,b)=>String(a.player?.name||'').localeCompare(String(b.player?.name||''),'de'));
+ }
+ if(action==='lineup-reference'){
+  if(!integer(q.team))return res.status(400).json({error:'Ungültiges Team'});
+  const g=(await api('/fixtures?id='+q.id,key))[0];
+  if(!g||![g.teams.home.id,g.teams.away.id].includes(Number(q.team)))return res.status(404).json({error:'Team nicht im Spiel'});
+  data=await footballReference(q.team,g.fixture.date,path=>api(path,key));
  }
  if(action==='lineups'){
   // One fixture only, no standings/players/h2h fanout. Called every ~15min
