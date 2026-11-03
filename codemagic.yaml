@@ -34,7 +34,7 @@ workflows:
       xcode: latest
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.matchdaypro.app
+        bundle_identifier: com.kevinkohm.matchdaypro
       vars:
         VITE_APP_MODE: preview
     scripts:

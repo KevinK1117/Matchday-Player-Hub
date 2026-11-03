@@ -10,7 +10,7 @@ Status: native project preparation, not a production-ready paid app. No real pay
 4. `npx cap sync`
 5. `npm run open:ios` (Mac and Xcode) or `npm run open:android` (Android Studio).
 
-Bundle ID `com.matchdaypro.app` is provisional and must be verified before creating store records. The existing interface is bundled locally; no production `server.url` wrapper is used. Native HTTP reaches the existing Vercel API. The shell currently blocks paid access and shows the intended subscription offer. It is a starting point, not secure production monetization.
+Bundle ID `com.kevinkohm.matchdaypro` is registered with Apple under the Matchday Pro developer team. The existing interface is bundled locally; no production `server.url` wrapper is used. Native HTTP reaches the existing Vercel API. The shell currently blocks paid access and shows the intended subscription offer. It is a starting point, not secure production monetization.
 
 ## Required user-owned accounts
 

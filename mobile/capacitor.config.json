@@ -1,5 +1,5 @@
 {
-  "appId":"com.matchdaypro.app",
+  "appId":"com.kevinkohm.matchdaypro",
   "appName":"Matchday Pro",
   "webDir":"dist",
   "server":{"androidScheme":"https"},
