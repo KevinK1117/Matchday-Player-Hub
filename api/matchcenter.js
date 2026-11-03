@@ -1,3 +1,4 @@
+import {footballTransfers} from '../lib/player-history.js';
 import {footballReference} from '../lib/lineup-reference.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
@@ -55,7 +56,8 @@ export default async function handler(req,res){
  }catch{recentError='Letzte Spiele nicht verfügbar'}}
  let participation='Keine kommende Begegnung verfügbar';
  if(team){try{const next=(await playerApi('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await playerApi('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
- data={profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season)};
+ let transferHistory=[],transferHistoryUnavailable=false;try{transferHistory=footballTransfers(await playerApi('/transfers?player='+q.id,key))}catch{transferHistoryUnavailable=true}
+ data={transferHistory,transferHistoryUnavailable,profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season)};
  }
  if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
  if(action==='squad'){
