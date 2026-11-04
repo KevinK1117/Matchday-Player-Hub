@@ -1,9 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {installationIdentity,subscriptionStatus} from '../lib/native-subscription.js';
+import {installationIdentity,subscriptionStatus,verifySubscription} from '../lib/native-subscription.js';
 const now=Date.parse('2026-11-04T12:00:00Z');
 function sample(overrides={}){return {subscriber:{entitlements:{pro:{product_identifier:'matchday_pro_monthly',expires_date:'2026-12-04T12:00:00Z',...overrides}},subscriptions:{matchday_pro_monthly:{store:'app_store',is_sandbox:false}}}}}
 test('installation identity is stable and cannot be selected by caller',()=>{assert.equal(installationIdentity('a'.repeat(43)),installationIdentity('a'.repeat(43)));assert.notEqual(installationIdentity('a'.repeat(43)),installationIdentity('b'.repeat(43)));for(const input of [undefined,'md_foo','short',{},'a'.repeat(100)])assert.throws(()=>installationIdentity(input))});
 test('only an active matching App Store entitlement grants access',()=>{assert.equal(subscriptionStatus(sample(),now).active,true);assert.equal(subscriptionStatus({},now).active,false);assert.equal(subscriptionStatus(sample({product_identifier:'other'}),now).active,false);assert.equal(subscriptionStatus(sample({expires_date:'invalid'}),now).active,false);assert.equal(subscriptionStatus(sample({expires_date:'2026-11-03T12:00:00Z'}),now).active,false)});
 test('sandbox is explicit and refunds revoke access',()=>{const data=sample();data.subscriber.subscriptions.matchday_pro_monthly.is_sandbox=true;assert.equal(subscriptionStatus(data,now).active,false);assert.equal(subscriptionStatus(data,now,true).active,true);data.subscriber.subscriptions.matchday_pro_monthly.refunded_at='2026-11-04';assert.equal(subscriptionStatus(data,now,true).active,false)});
 test('billing grace remains active only until its deadline',()=>{const d=sample({expires_date:'2026-11-03',grace_period_expires_date:'2026-11-05'});assert.equal(subscriptionStatus(d,now).active,true);assert.equal(subscriptionStatus(d,Date.parse('2026-11-06')).active,false)});
+test('server verifies Customer Info with the app key and fails closed on provider errors',async t=>{
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  assert.equal(url,'https://api.revenuecat.com/v1/subscribers/md_test');
+  assert.equal(options.headers.Authorization,'Bearer appl_test');
+  return new Response(JSON.stringify(sample({expires_date:'2099-12-04T12:00:00Z'})),{status:200});
+ });
+ const old=process.env.REVENUECAT_IOS_PUBLIC_KEY;
+ process.env.REVENUECAT_IOS_PUBLIC_KEY='appl_test';
+ try{
+  assert.equal((await verifySubscription('md_test')).active,true);
+  globalThis.fetch.mock.mockImplementation(async()=>new Response('{}',{status:503}));
+  await assert.rejects(verifySubscription('md_test'),e=>e.statusCode===503);
+  globalThis.fetch.mock.mockImplementation(async()=>new Response('{}',{status:200}));
+  assert.equal((await verifySubscription('md_test')).active,false);
+ }finally{if(old===undefined)delete process.env.REVENUECAT_IOS_PUBLIC_KEY;else process.env.REVENUECAT_IOS_PUBLIC_KEY=old}
+});

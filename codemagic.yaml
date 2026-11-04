@@ -8,6 +8,8 @@ workflows:
       xcode: latest
       vars:
         VITE_APP_MODE: preview
+        # Public SDK key, intentionally included in the installed app.
+        VITE_REVENUECAT_IOS_PUBLIC_KEY: appl_wmuKciAjaDvSfNqgaJmeodjIOsg
     scripts:
       - name: Prepare bundled iOS app
         script: |
@@ -38,6 +40,8 @@ workflows:
         bundle_identifier: com.kevinkohm.matchdaypro
       vars:
         VITE_APP_MODE: preview
+        # Public SDK key, intentionally included in the installed app.
+        VITE_REVENUECAT_IOS_PUBLIC_KEY: appl_wmuKciAjaDvSfNqgaJmeodjIOsg
     scripts:
       - name: Prepare bundled iOS app
         script: |
