@@ -1,7 +1,21 @@
 {
-  "appId":"com.kevinkohm.matchdaypro",
-  "appName":"Matchday Pro",
-  "webDir":"dist",
-  "server":{"androidScheme":"https"},
-  "plugins":{"CapacitorHttp":{"enabled":true}}
+  "appId": "com.kevinkohm.matchdaypro",
+  "appName": "Matchday Pro",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "banner",
+        "list"
+      ]
+    }
+  }
 }

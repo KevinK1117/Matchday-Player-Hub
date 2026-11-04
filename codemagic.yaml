@@ -16,6 +16,7 @@ workflows:
           npm run build
           test -d ios || npx cap add ios
           npx cap sync ios
+          node scripts/configure-ios.mjs
       - name: Build simulator app
         script: |
           cd "$CM_BUILD_DIR/mobile"
@@ -45,6 +46,7 @@ workflows:
           npm run build
           test -d ios || npx cap add ios
           npx cap sync ios
+          node scripts/configure-ios.mjs
       - name: Apply signing and build number
         script: |
           cd "$CM_BUILD_DIR/mobile/ios/App"

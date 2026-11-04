@@ -1,18 +1,18 @@
 import {liveTipMessage} from '../lib/push-message.js';
 import {watches,wantsLiveTip} from '../lib/push-events.js';
 import {favoriteSignals} from '../lib/favorite-push.js';
-import {redis,configurePush,sendPush} from './push.js';
+import {redis,anyPushReady,sendPush} from './push.js';
 const berlinDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 async function fixtures(base,date){const url=new URL(base);url.searchParams.set('action','fixtures');url.searchParams.set('date',date);const r=await fetch(url,{signal:AbortSignal.timeout(20000),headers:{'Cache-Control':'no-cache'}});if(!r.ok)throw Error('Live API HTTP '+r.status);const d=await r.json();if(!Array.isArray(d.data))throw Error('Keine gültigen Spieldaten');return d.data}
 async function nhlPeriod(id){const r=await fetch('https://api-web.nhle.com/v1/gamecenter/'+encodeURIComponent(id)+'/boxscore',{signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('NHL-Detail HTTP '+r.status);const g=await r.json();return Number(g.periodDescriptor?.number||g.period||0)}
 export default async function handler(req,res){
  if(!process.env.CRON_SECRET||req.headers.authorization!=='Bearer '+process.env.CRON_SECRET)return res.status(401).end();
- if(!configurePush())return res.status(503).json({error:'VAPID fehlt'});
+ if(!anyPushReady())return res.status(503).json({error:'Push nicht konfiguriert'});
  const budgetUntil=Date.now()+45000;
  const origin='https://matchday-player-hub.vercel.app',date=berlinDate(),signals=[],errors=[];
  let keys;try{keys=await redis('SMEMBERS','matchday:push:keys')||[]}catch(e){return res.status(503).json({error:'Push-Speicher nicht verfügbar'})}
  if(!keys.length)return res.status(200).json({signals:0,sent:0,subscribers:0,notice:'Noch keine Push-Abonnenten'});
- const subscribers=[];for(const key of keys){try{const raw=await redis('GET',key);if(!raw)continue;const record=JSON.parse(raw);subscribers.push({key,subscription:record.subscription||record,preferences:record.preferences||{liveTips:true,favoriteEvents:false}})}catch{}}
+ const subscribers=[];for(const key of keys){try{const raw=await redis('GET',key);if(!raw){await redis('SREM','matchday:push:keys',key);continue}const record=JSON.parse(raw);subscribers.push({key,subscription:record.subscription||record,preferences:record.preferences||{liveTips:true,favoriteEvents:false}})}catch{}}
  if(req.query?.test==='1'){
   let sent=0,failed=0;const details=[];
   for(const key of keys){try{const raw=await redis('GET',key);if(!raw)continue;await sendPush((JSON.parse(raw).subscription||JSON.parse(raw)),{title:'Matchday PRO · Push-Test',body:'Testnachricht vom Matchday-Server',url:origin+'/matchcenter',tag:'matchday-push-test'});sent++}catch(e){failed++;details.push({status:e.statusCode||null,message:String(e.message||e).slice(0,130)})}}

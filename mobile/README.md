@@ -1,39 +1,29 @@
-# Matchday Pro — iOS / Android preparation
+# Matchday Pro mobile
 
-Status: native project preparation, not a production-ready paid app. No real payments are enabled. The current website is unchanged. The intended German storefront price is EUR 9.99 per month, auto-renewing; it must be configured in both stores. Actual localized price must come from the store product, never a hardcoded checkout price.
+## Status (2026-11-04)
 
-## Local build
+The owner installed TestFlight 1.0 (1793738899) successfully. Apple app 6830088598 uses bundle `com.kevinkohm.matchdaypro`. The German monthly product `matchday_pro_monthly` is created at €9.99. This branch now implements purchase/restore UI, server verification, and native iOS APNs delivery, but these changes are NOT yet configured, deployed, signed, or tested on a device. The existing installed preview does not gain these features without an update.
 
-1. `npm ci`
-2. `npm run build`
-3. `npm run setup:native` generates the iOS and Android platform templates reproducibly
-4. `npx cap sync`
-5. `npm run open:ios` (Mac and Xcode) or `npm run open:android` (Android Studio).
+## Abo setup
 
-Bundle ID `com.kevinkohm.matchdaypro` is registered with Apple under the Matchday Pro developer team. The existing interface is bundled locally; no production `server.url` wrapper is used. Native HTTP reaches the existing Vercel API. The shell currently blocks paid access and shows the intended subscription offer. It is a starting point, not secure production monetization.
+- In RevenueCat, create/select the owner project and iOS app; connect the correct App Store account. Map `matchday_pro_monthly` to entitlement `pro`, and to the current offering's MONTHLY package.
+- Codemagic public build values: `VITE_REVENUECAT_IOS_PUBLIC_KEY`, `VITE_PRIVACY_URL`, `VITE_TERMS_URL`. Values prefixed VITE are bundled publicly. Never put private keys there.
+- Vercel secret: `REVENUECAT_SECRET_KEY`, restricted to reading customer information. The backend reads current RevenueCat subscriber status rather than trusting a client boolean. Sandbox access requires explicit server `ALLOW_SANDBOX_SUBSCRIPTIONS=true` for TestFlight billing tests; turn off before public paid release.
+- App installation generates a random 256-bit credential persisted through native Preferences. Its SHA-256 digest is the RevenueCat app user ID. The server derives this ID from the credential rather than accepting a caller-selected user ID. Restore uses StoreKit/RevenueCat for a reinstall or second device. There is no separate user-account login or cloud favorites sync.
+- Public web APIs stay public. The native offer gates native access after both SDK and server verification; it does not turn existing public sports APIs into private subscription APIs.
+- `VITE_APP_MODE=preview` keeps the explicitly labeled developer preview route. A paid build must set `VITE_APP_MODE=production`; preparation fails if public SDK key or legal URLs are absent. Purchases remain unavailable until the store product and RevenueCat setup actually respond.
 
-## Required user-owned accounts
+## Native iOS push setup
 
-- Apple Developer Program: https://developer.apple.com/programs/enroll/
-- Google Play Console: https://play.google.com/console/signup
-- RevenueCat project: https://app.revenuecat.com/
+- The owner must approve creating a new APNs credential, scoped to Matchday Pro where Apple offers topic-specific keys. Do not reuse App Store Connect credentials as an APNs key.
+- Store only in Vercel secrets: `APNS_PRIVATE_KEY`, `APNS_KEY_ID`; config `APNS_TEAM_ID=2G3S3473A3`, `APNS_TOPIC=com.kevinkohm.matchdaypro`, `APNS_ENVIRONMENT=production` for TestFlight/App Store. A debug-device build with a development profile instead needs sandbox APNs and matching entitlements.
+- Uses existing Redis configuration and the existing five-minute push worker. Native subscribers share the same favorite-event matching, confirmation events, retry outbox and delivery deduplication as web push.
+- POST/DELETE `/api/native-push` authenticate the installation credential. The server only calls Apple's fixed APNs endpoints. Device records expire after 90 days without refresh; invalid device tokens are removed after APNs rejects them. Preferences sync on favorite edits, reconnection and foregrounding. The app asks iOS for notification permission only after the user taps enable.
+- `node scripts/configure-ios.mjs` adds AppDelegate registration forwarding, production APNs entitlement, the Preferences required-reason manifest and standard-crypto export declaration to generated iOS templates. Existing Apple App ID push capability/profile must match.
+- Native push currently targets iOS. Android FCM still needs its own Firebase configuration and sender implementation.
 
-Account registration, identity verification, paid agreements, tax details and bank/payout information must be completed by the owner. No store account or paid subscription was purchased by this task.
+## Build and verification
 
-## Subscription configuration
+`npm ci && npm run build`, then `test -d ios || npx cap add ios`, `npx cap sync ios`, `node scripts/configure-ios.mjs`. Cloud workflows apply the iOS patch after sync. Use Xcode/Codemagic for signing; a Linux bundle build is not a signed iPhone build.
 
-Create `matchday_pro_monthly` in each store; on Google create a monthly auto-renewing base plan. Set Germany/EUR price to 9.99 and review other territories separately. RevenueCat entitlement `pro` must map to both products and the current offering's monthly package. Put only public platform SDK keys in `.env` (see `.env.example`). Secret store credentials and service keys belong in the backend/RevenueCat dashboard, never in this repository.
-
-The purchase and restore adapter exists, but buttons intentionally remain disabled. Before enabling, display the store's localized price, wire cancellation/account management, test purchase/restore/refund/grace-period/revocation, and connect an authenticated user identity to server-side subscription authorization. A local boolean or client SDK check must not protect paid APIs. Public existing website APIs are not yet subscription-protected.
-
-## Release blockers
-
-- Real developer accounts, signed paid-app agreements, bank/tax setup and store products.
-- Authentication, cross-device identity, backend entitlement checks and subscription event handling.
-- Native APNs/FCM token storage and event delivery; existing service-worker Web Push does not cover native apps. Existing web push controls must be replaced in native UI before release.
-- Actual privacy policy, terms, support contact, account deletion where applicable, age rating and store data disclosures.
-- Confirm commercial redistribution rights for all football/NHL data, images and logos. Review store policy treatment of betting-related tips and external betting links; approval is not guaranteed.
-- Native icons/splash, deep links, network/error/offline handling, accessibility and device testing.
-- Signed Android AAB and signed iOS archive, sandbox billing, TestFlight/Play internal tests and store review.
-
-This environment cannot sign or submit iOS builds without the owner's Apple account and Apple build tooling. The web bundle built successfully and both native platform templates were generated and synchronized here. Generated platform folders are intentionally ignored and can be recreated with `npm run setup:native`; no compiled/signed IPA/AAB or store publication is claimed.
+Before release: real privacy/terms/support URLs, paid-app agreement/bank/tax completion, App Store disclosures, receipt/refund/grace/reinstall tests and real-device foreground/background/terminated push tests. Do not submit or claim production readiness before these pass. The owner must confirm any legally binding terms and credential access changes.
