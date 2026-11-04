@@ -2,7 +2,7 @@
 function eligibleScorer(p,confirmedOnly=false){
  if(!p||p.id==null||!p.name||p.exclusionReason||p.unavailable)return false;
  const pos=String(p.lineupPosition||'').toUpperCase();
- if(!p.lineupSource||!(p.sport==='nhl'?['L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(pos))return false;
+ if(!p.lineupSource||!(p.sport==='nhl'?['C','L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(pos))return false;
  const state=String(p.participation||'');
  if(state==='Ausfall gemeldet'||state.startsWith('Nicht in bestätigter Startelf')||state.startsWith('Extern als Ausfall'))return false;
  const nhl=p.sport==='nhl',confirmed=nhl?state==='Bestätigter Einsatz':state==='Startelf bestätigt';
@@ -31,3 +31,4 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
  for(const p of ranked.sort((a,b)=>b.score-a.score)){const id=(p.player.sport||'football')+':'+p.player.id,fixture=String(p.game.fixture.id);if(seen.has(id)||(perGame.get(fixture)||0)>=4)continue;seen.add(id);perGame.set(fixture,(perGame.get(fixture)||0)+1);eligible.push(p)}
  return {picks:eligible.slice(0,count),available:eligible.length,complete:eligible.length>=count};
 }
+

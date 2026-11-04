@@ -10,28 +10,29 @@ test('NHL uses the matching team from the last completed boxscore',async()=>{
  assert.equal(ref.side.forwards[0].playerId,8);assert.equal(ref.fixtureId,2);
 });
 test('scorer roles require lineup evidence and exclude centers and midfielders',()=>{
- for(const pos of ['C','D','G',''])assert.equal(scorerRole({lineupSource:'last',lineupPosition:pos},'nhl'),false);
- for(const pos of ['L','R','LW','RW'])assert.equal(scorerRole({lineupSource:'last',lineupPosition:pos},'nhl'),true);
+ for(const pos of ['D','G',''])assert.equal(scorerRole({lineupSource:'last',lineupPosition:pos},'nhl'),false);
+ for(const pos of ['C','L','R','LW','RW'])assert.equal(scorerRole({lineupSource:'last',lineupPosition:pos},'nhl'),true);
  assert.equal(scorerRole({lineupSource:'current',lineupPosition:'F'},'football'),true);
  assert.equal(scorerRole({lineupSource:'last',lineupPosition:'M'},'football'),false);
  assert.equal(scorerRole({position:'Attacker'},'football'),false);
 });
 test('missing data never fabricates a lineup',async()=>{assert.equal(await footballReference(1,'2026-11-04',async()=>[]),null);assert.equal(await nhlReference('EDM','2026-11-04',async()=>({games:[]})),null)});
 
-test('combo excludes centers even with a stronger ranking',async()=>{
+test('combo includes centers and excludes missing position evidence',async()=>{
  const {rankScorers}=await import('../public/combo.js');const now=Date.now();
  const games=[{fixture:{id:1,date:new Date(now+3600000).toISOString(),status:{short:'NS'}}}];
  const base={name:'Spieler',sport:'nhl',fixtureId:1,GP:20,goals:10,shotsPerGame:3,lineupSource:'last'};
  const players=[{...base,id:1,lineupPosition:'C',score:100},{...base,id:2,lineupPosition:'L',score:1},{...base,id:3,lineupPosition:'R',score:2},{...base,id:4,position:'R',lineupSource:null,score:3}];
- assert.deepEqual(rankScorers(games,players,6,now).picks.map(x=>x.player.id),[3,2]);
+ assert.deepEqual(rankScorers(games,players,6,now).picks.map(x=>x.player.id),[1,3,2]);
 });
 
-test('explicit season fallback retains wings and forwards without admitting centers',async()=>{
+test('explicit season fallback retains wings and forwards including centers',async()=>{
  const {rankScorers}=await import('../public/combo.js');const now=Date.now();
  const games=[{fixture:{id:1,date:new Date(now+3600000).toISOString(),status:{short:'NS'}}}];
  const base={name:'Wing',sport:'nhl',fixtureId:1,GP:16,goals:8,shotsPerGame:3,lineupSource:'season',participation:'Aufstellung offen · Saisonposition'};
  assert.equal(scorerRole({...base,lineupPosition:'L'},'nhl'),true);
  const candidates=[{...base,id:1,lineupPosition:'L'},{...base,id:2,lineupPosition:'C'}];
- assert.deepEqual(rankScorers(games,candidates,6,now).picks.map(r=>r.player.id),[1]);
+ assert.deepEqual(rankScorers(games,candidates,6,now).picks.map(r=>r.player.id),[1,2]);
  assert.equal(rankScorers(games,candidates,6,now,true).picks.length,0);
 });
+

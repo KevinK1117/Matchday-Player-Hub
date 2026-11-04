@@ -25,9 +25,11 @@ test('a scorer provider failure remains an error and can be retried',async()=>{
  vm.runInContext(html.slice(start,end),context);await context.renderHome();
  assert.equal(painted,false);assert.equal(dashboardData.error,true);assert.match(elements.homePlayers.innerHTML,/Anbieterlimit erreicht/);assert.match(elements.homePlayers.innerHTML,/retryHome/);assert.equal(context.homeCache.size,0);
 });
-test('home season fallback cannot reintroduce centers or excluded players',async()=>{
+test('home season fallback includes centers but never excluded players',async()=>{
  let painted;const elements={homePlayers:{},homeSubtitle:{},date:{value:'2026-11-05'}};
  const context=vm.createContext({homeToken:0,homeKey:()=> 'key',homeCache:new Map(),dashboard:()=>{},$:id=>elements[id],games:[{fixture:{id:1,date:new Date(Date.now()+3600000).toISOString(),status:{short:'NS'}},league:{id:10000}}],league:10000,sport:'nhl',demoMode:false,view:'home',fetch:async()=>({ok:true,json:async()=>({allPlayers:[{id:1,fixtureId:1,position:'R',lineupPosition:'C',goals:10},{id:2,fixtureId:1,position:'L',goals:5,exclusionReason:'Nicht im Spielkader'},{id:3,fixtureId:1,position:'R',lineupPosition:'R',goals:4}]})}),rankScorers:()=>({picks:[]}),URLSearchParams,paintHome:data=>{painted=data},esc:s=>s});
  const start=html.indexOf('async function renderHome()'),end=html.indexOf('async function seasonHome',start);
- vm.runInContext(html.slice(start,end),context);await context.renderHome();assert.deepEqual(Array.from(painted.rows,r=>r.player.id),[3]);assert.equal(painted.statisticsOnly,true);
+ vm.runInContext(html.slice(start,end),context);await context.renderHome();assert.deepEqual(Array.from(painted.rows,r=>r.player.id),[1,3]);assert.equal(painted.statisticsOnly,true);
 });
+
+test('NHL displayed chance uses the same expected goal rate as ranking',()=>{const c=vm.createContext({});vm.runInContext(fn('scorerChance','function homePlayerCard'),c);assert.equal(c.scorerChance({goals:10,GP:20},true),null);assert.ok(Math.abs(c.scorerChance({goals:10,GP:20,score:.3},true)-100*(1-Math.exp(-.3)))<1e-9)});

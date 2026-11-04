@@ -689,7 +689,7 @@ async function generateMixedHockey(){
   const [nhlGames,delGames,nhlPlayers]=await Promise.allSettled([
    get({action:'fixtures',date},'nhl'),
    get({action:'del',date},'del'),
-   fetch('/api/nhl?lineupVersion=3&'+new URLSearchParams({date,count:String(count)}),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'NHL-Spielerdaten fehlen');return d})
+   fetch('/api/nhl?modelVersion=2&lineupVersion=3&'+new URLSearchParams({date,count:String(count)}),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'NHL-Spielerdaten fehlen');return d})
   ]);
   if(token!==comboToken)return;
   const nhl=nhlGames.status==='fulfilled'?(nhlGames.value.data||[]):[];
@@ -717,7 +717,7 @@ async function generate(){
   else{
    stage='Torschützen-API laden';
    const query=new URLSearchParams({date:$('date').value,sport:currentSport,count:String(count)});
-   const cached=homeCache.get(homeKey());if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?lineupVersion=3&':'/api/football?lineupVersion=3&')+query,{}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
+   const cached=homeCache.get(homeKey());if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?modelVersion=2&lineupVersion=3&':'/api/football?lineupVersion=3&')+query,{}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
   }
   if(token!==comboToken)return;
   stage='Spieler bewerten';
@@ -895,7 +895,7 @@ function scorerChance(p,nhl){
  const goals=Number(p.goals),games=Number(p.GP),minutes=Number(p.minutes),avg=Number(p.minutesPerGame);
  if(!Number.isFinite(goals)||goals<0)return null;
  let lambda;
- if(nhl){if(!Number.isFinite(games)||games<10)return null;lambda=goals/games}
+ if(nhl){if(!Number.isFinite(games)||games<10||p.score==null||!Number.isFinite(Number(p.score)))return null;lambda=Number(p.score)}
  else {if(!Number.isFinite(minutes)||minutes<600||!Number.isFinite(avg)||avg<45)return null;lambda=(goals/minutes)*Math.min(90,avg)}
  if(!Number.isFinite(lambda)||lambda<0||lambda>3)return null;
  return 100*(1-Math.exp(-lambda));
@@ -904,7 +904,7 @@ function homePlayerCard(row,i,sp=sport){const p=row.player,g=row.game,nhl=sp==='
 async function renderHome(){const token=++homeToken,key=homeKey();dashboard();if(homeCache.has(key)){paintHome(homeCache.get(key));return}$('homePlayers').innerHTML='<div class="loading">Spielerstatistiken werden geladen …</div>';try{const selectedGames=games.filter(g=>!league||g.league.id===league),upcoming=selectedGames.some(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>Date.now()+300000);let result;
  if(sport==='del'){result={rows:[],evaluated:0,seasonal:false,notice:'DEL-Torschützenstatistiken sind derzeit nicht angebunden.'}}
  else if(demoMode){const p={id:10001,name:'Demo-Torschütze',team:'Demo-Team',sport,goals:8,GP:12,shots:40,shotsPerGame:3.3,minutes:850,minutesPerGame:77,participation:'Demo · Einsatz nicht bestätigt'};result={rows:[{player:p,game:selectedGames[0]}],evaluated:1,seasonal:false}}
- else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?lineupVersion=3&':'/api/football?lineupVersion=3&')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){throw apiError;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length){const positions=sport==='nhl'?['L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD'];result.rows=rawPlayers.filter(p=>positions.includes(String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase())&&!p.exclusionReason&&!p.unavailable&&p.goals>=2).sort((a,b)=>b.goals-a.goals).slice(0,10).map(p=>({player:{...p,participation:'Aufstellung offen · Modell aus Saisonwerten'},game:selectedGames.find(g=>String(g.fixture.id)===String(p.fixtureId))}));result.statisticsOnly=true;}}
+ else if(upcoming){const endpoint=(sport==='nhl'?'/api/nhl?modelVersion=2&lineupVersion=3&':'/api/football?lineupVersion=3&')+new URLSearchParams({date:$('date').value,count:'10'}).toString();let d;try{const r=await fetch(endpoint,{});d=await r.json();if(!r.ok)throw Error(d.detail||d.error||'Spielerstatistiken nicht verfügbar')}catch(apiError){throw apiError;}const rawPlayers=(d.allPlayers||d.players||[]).map(p=>({...p,sport})),ranked=rankScorers(selectedGames,rawPlayers,10);result={rows:ranked.picks,rawPlayers,evaluated:rawPlayers.length,updatedAt:d.updatedAt,seasonal:false};if(!result.rows.length){const positions=sport==='nhl'?['C','L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD'];result.rows=rawPlayers.filter(p=>positions.includes(String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase())&&!p.exclusionReason&&!p.unavailable&&p.goals>=2).sort((a,b)=>b.goals-a.goals).slice(0,10).map(p=>({player:{...p,participation:'Aufstellung offen · Modell aus Saisonwerten'},game:selectedGames.find(g=>String(g.fixture.id)===String(p.fixtureId))}));result.statisticsOnly=true;}}
  else {try{result=await seasonHome()}catch(err){console.warn('Scorer-Fallback nicht verfügbar',err);result={rows:[],evaluated:0,seasonal:false,notice:'Keine Torschützenstatistiken verfügbar.'}}}
  if(token!==homeToken||view!=='home'||key!==homeKey())return;homeCache.set(key,result);paintHome(result)
  }catch(e){if(token!==homeToken||view!=='home')return;dashboard({error:true});$('homeSubtitle').textContent='Spielerstatistiken derzeit eingeschränkt';$('homePlayers').innerHTML=`<div class="empty card"><strong>Analyse konnte nicht geladen werden</strong>${esc(e.message)}<br><button class="secondary" id="retryHome">Erneut laden</button></div>`}}
