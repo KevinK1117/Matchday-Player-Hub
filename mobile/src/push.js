@@ -15,7 +15,7 @@ export async function createNativePush(){
  }
  async function sync(){
   if(!enabled||!deviceToken)return;dirty=true;if(running)return;running=true;
-  try{while(dirty&&enabled){dirty=false;await save()}status('Push aktiv · Favoriten synchronisiert. Ereignisprüfung etwa alle 5 Minuten.')}
+  try{while(dirty&&enabled){dirty=false;await save()}status('Push aktiv · Nur Tore und Spielende deiner Favoriten.')}
   catch{status('Push-Synchronisierung fehlgeschlagen. Beim nächsten Öffnen wird erneut versucht.')}
   finally{running=false}
  }
@@ -33,6 +33,6 @@ export async function createNativePush(){
   }catch(e){status(e.message||'Push momentan nicht verfügbar')}
  }
  if(enabled&&(await PushNotifications.checkPermissions()).receive==='granted')await PushNotifications.register();
- else status('Mit Push erhältst du Spielereignisse und bestätigte Aufstellungen deiner Favoriten.');
+ else status('Mit Push erhältst du Tore und Spielende deiner Favoriten.');
  window.addEventListener('online',sync);return {toggle,sync};
 }
