@@ -1,0 +1,7 @@
+/* Native webview extends behind system bars: reserve each device's safe area. */
+html{--native-safe-top:env(safe-area-inset-top,0px);--native-safe-bottom:env(safe-area-inset-bottom,0px)}
+body{padding-top:var(--native-safe-top)!important;padding-left:env(safe-area-inset-left,0px)!important;padding-right:env(safe-area-inset-right,0px)!important}
+.app-header{position:relative!important;top:auto!important}
+#native-preview-badge{position:static;margin:0 0 12px;padding:6px 9px;border-radius:8px;background:#173d32;color:#e1fff4;font:11px/1.4 -apple-system,BlinkMacSystemFont,Arial,sans-serif;text-align:center;overflow-wrap:anywhere}
+#native-subscription{box-sizing:border-box;padding-top:calc(22px + var(--native-safe-top))!important;padding-bottom:calc(22px + var(--native-safe-bottom))!important;padding-left:calc(22px + env(safe-area-inset-left,0px));padding-right:calc(22px + env(safe-area-inset-right,0px))}
+@media(max-width:760px){.dialog{box-sizing:border-box;padding-top:var(--native-safe-top)!important;padding-bottom:var(--native-safe-bottom)!important}.top nav{padding-bottom:calc(8px + var(--native-safe-bottom))!important}}

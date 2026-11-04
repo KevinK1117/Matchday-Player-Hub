@@ -9,6 +9,7 @@ await cp(new URL('../public/',root),new URL('public/',web),{recursive:true});
 await cp(new URL('src/',root),web,{recursive:true});
 let html=await readFile(new URL('../index.html',root),'utf8');
 // Bundle the existing interface locally. Native HTTP talks to the existing backend.
-html=html.replace('</head>','<script type="module" src="/native.js"></script></head>');
+html=html.replace('width=device-width,initial-scale=1','width=device-width,initial-scale=1,viewport-fit=cover');
+html=html.replace('</head>','<link rel="stylesheet" href="/native-layout.css"><script type="module" src="/native.js"></script></head>');
 await writeFile(new URL('index.html',web),html);
 console.log('Bundled Matchday interface prepared');

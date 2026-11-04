@@ -9,7 +9,7 @@ export async function createNativePush(){
  function save(method='POST'){
   writes=writes.catch(()=>{}).then(async()=>{
   const {secret}=await installation();
-  const response=await fetch('/api/native-push',{method,headers:{'Content-Type':'application/json','X-Matchday-Install':secret},...(method==='POST'?{body:JSON.stringify({token:deviceToken,preferences:window.matchdayPushPreferences?.()||{}})}:{})});
+  const response=await fetch('/api/push?channel=ios',{method,headers:{'Content-Type':'application/json','X-Matchday-Install':secret},...(method==='POST'?{body:JSON.stringify({token:deviceToken,preferences:window.matchdayPushPreferences?.()||{}})}:{})});
   if(!response.ok)throw Error((await response.json()).error||'Push-Einstellungen konnten nicht gespeichert werden');
   });return writes;
  }
@@ -26,7 +26,7 @@ export async function createNativePush(){
  async function toggle(){
   try{
    if(enabled){enabled=false;dirty=false;try{await save('DELETE')}catch(e){enabled=true;throw e}await Preferences.set({key:'matchday-native-push-enabled',value:'false'});await PushNotifications.unregister();status('Push-Benachrichtigungen deaktiviert');return}
-   const response=await fetch('/api/native-push'),config=await response.json();if(!response.ok||!config.enabled)throw Error('Apple Push ist auf dem Server noch nicht eingerichtet.');
+   const response=await fetch('/api/push?channel=ios'),config=await response.json();if(!response.ok||!config.enabled)throw Error('Apple Push ist auf dem Server noch nicht eingerichtet.');
    let permission=await PushNotifications.checkPermissions();if(permission.receive==='prompt'||permission.receive==='prompt-with-rationale')permission=await PushNotifications.requestPermissions();
    if(permission.receive!=='granted')throw Error('Bitte Mitteilungen für Matchday Pro in den iPhone-Einstellungen erlauben.');
    enabled=true;await Preferences.set({key:'matchday-native-push-enabled',value:'true'});status('Apple Push wird verbunden …');await PushNotifications.register();

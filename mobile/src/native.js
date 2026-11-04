@@ -33,7 +33,7 @@ const overlay=document.createElement('section');overlay.id='native-subscription'
 overlay.innerHTML='<div class="native-offer"><small>MATCHDAY PRO · MONATSABO</small><h1>Matchday <em>PRO</em></h1><p>Dein Spiel. Alle Details.</p><ul><li>Fußball- und NHL-Spielanalysen</li><li>Spielerprofile und aktuelle Torform</li><li>Live-Ticker und Favoriten</li></ul><div class="native-price" id="native-price">9,99 € / Monat</div><small id="native-price-note">Geplanter Preis. Verbindlich ist der im Store angezeigte Preis.</small><button id="native-buy" disabled>Monatsabo wird geladen …</button><button class="native-restore" id="native-restore" disabled>Käufe wiederherstellen</button><p role="status" id="native-status">Store-Verbindung wird geprüft …</p><small>Monatlich automatisch verlängernd. Kündigung in den Store-Einstellungen; Zugang bis zum Ende des bezahlten Zeitraums.</small><p><a id="native-privacy" hidden>Datenschutz</a> <a id="native-terms" hidden>Nutzungsbedingungen</a></p><small>Keine Gewinngarantie. Statistische Analysen, keine Wettplatzierung.</small></div>';
 document.body.append(overlay);
 if(import.meta.env.VITE_APP_MODE==='preview'){
- const button=document.createElement('button');button.className='native-restore';button.textContent='Entwicklervorschau öffnen · keine Käufe';button.addEventListener('click',()=>{overlay.hidden=true;overlay.style.display='none';const badge=document.createElement('div');badge.textContent='ENTWICKLERVORSCHAU · kein bezahlter Zugang';badge.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#173d32;color:#fff;font:10px/1.4 Arial;text-align:center;padding:4px;pointer-events:none';document.body.append(badge)});overlay.querySelector('.native-offer').append(button);
+ const button=document.createElement('button');button.className='native-restore';button.textContent='Entwicklervorschau öffnen · keine Käufe';button.addEventListener('click',()=>{overlay.hidden=true;overlay.style.display='none';let badge=document.getElementById('native-preview-badge');if(!badge){badge=document.createElement('div');badge.id='native-preview-badge';badge.textContent='Entwicklervorschau · kein bezahlter Zugang';document.querySelector('.app-header')?.prepend(badge)}});overlay.querySelector('.native-offer').append(button);
 }
 
 function legalLink(id,value){if(!value)return false;try{const u=new URL(value);if(u.protocol!=='https:')return false;const a=document.getElementById(id);a.href=u.href;a.target='_blank';a.rel='noopener';a.hidden=false;return true}catch{return false}}
@@ -59,7 +59,7 @@ export async function purchaseSubscription(pack){await configurePurchases();awai
 async function verifyAccess(){
  const {customerInfo}=await Purchases.getCustomerInfo();
  if(!customerInfo.entitlements.active[ENTITLEMENT])return false;
- const {secret}=await installation();const response=await fetch('/api/subscription',{method:'POST',headers:{'X-Matchday-Install':secret}});
+ const {secret}=await installation();const response=await fetch('/api/push?channel=subscription',{method:'POST',headers:{'X-Matchday-Install':secret}});
  if(!response.ok)throw Error('Abostatus kann gerade nicht geprüft werden. Bitte erneut versuchen.');
  return (await response.json()).active===true;
 }
