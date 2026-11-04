@@ -34,6 +34,7 @@ export default async function handler(req,res){
  if(['clock','detail','lineups','lineup-reference','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
+ if(action==='player'&&q.team!=null&&!integer(q.team))return res.status(400).json({error:'Ungültige Team-ID'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
  try{
@@ -48,14 +49,16 @@ export default async function handler(req,res){
  }
  if(action==='player'){
  const profiles=await playerApi('/players?id='+q.id+'&season='+q.season,key);
- const team=profiles[0]?.statistics?.[0]?.team?.id;
+ const stats=profiles[0]?.statistics||[];
+ if(q.team!=null&&!stats.some(s=>String(s.team?.id)===String(q.team)))return res.status(404).json({error:'Für dieses Team fehlen Spielerstatistiken'});
+ const team=q.team!=null?Number(q.team):stats[0]?.team?.id;
  let recent=[],recentError=null;
  if(team){try{
  const fixtures=(await playerApi('/fixtures?team='+team+'&last=5&status=FT-AET-PEN',key)).filter(g=>isScorerCompetition(g.league)&&['FT','AET','PEN'].includes(g.fixture?.status?.short)&&Date.parse(g.fixture.date)<Date.now()).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,5);
  recent=await Promise.all(fixtures.map(async g=>{try{const sides=await playerApi('/fixtures/players?fixture='+g.fixture.id,key);const entry=sides.flatMap(s=>s.players||[]).find(p=>Number(p.player.id)===Number(q.id));const st=entry?.statistics?.[0];return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,minutes:st?.games?.minutes??null,goals:st?.goals?.total??null,shots:st?.shots?.total??null,onTarget:st?.shots?.on??null,available:!!st};}catch{return {date:g.fixture.date,home:g.teams.home.name,away:g.teams.away.name,available:false}}}));
  }catch{recentError='Letzte Spiele nicht verfügbar'}}
  let participation='Keine kommende Begegnung verfügbar';
- if(team){try{const next=(await playerApi('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await playerApi('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
+ if(team){try{const next=(await playerApi('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await playerApi('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length===11?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
  let transferHistory=[],transferHistoryUnavailable=false;try{transferHistory=footballTransfers(await playerApi('/transfers?player='+q.id,key))}catch{transferHistoryUnavailable=true}
  data={transferHistory,transferHistoryUnavailable,profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season)};
  }
@@ -124,3 +127,4 @@ export default async function handler(req,res){
  return res.status(200).json({configured:true,data,source:'API-Sports',updatedAt:new Date().toISOString()});
  }catch{return res.status(502).json({error:'Sportdaten konnten nicht geladen werden. Bitte später erneut versuchen oder API-Tarif prüfen.'})}
 }
+

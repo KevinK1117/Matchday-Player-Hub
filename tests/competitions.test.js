@@ -1,8 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {isTopFlight} from '../public/competitions.js';
-test('top divisions across all world regions are included by country and exact name',()=>{
- for(const [country,name] of [['Germany','Bundesliga'],['England','Premier League'],['Brazil','Serie A'],['Argentina','Liga Profesional Argentina'],['USA','Major League Soccer'],['Japan','J1 League'],['South-Korea','K League 1'],['Saudi-Arabia','Pro League'],['South-Africa','Premier Soccer League'],['Egypt','Premier League'],['Australia','A-League'],['New-Zealand','National League'],['Northern-Ireland','Premiership']])assert.equal(isTopFlight({country,name,type:'League'}),true,country+': '+name);
+import test from 'node:test';import assert from 'node:assert/strict';import {isScorerCompetition,isDrawCompetition} from '../public/competitions.js';
+test('explicit approved league and tournament list is shared by scorers and match analysis',()=>{
+ for(const [country,name,type] of [['Germany','Bundesliga','League'],['Germany','2. Bundesliga','League'],['Germany','DFB Pokal','Cup'],['World','UEFA Champions League','Cup'],['World','UEFA Europa League','Cup'],['Japan','J2 League','League'],['USA','Major League Soccer','League']])for(const accepts of [isScorerCompetition,isDrawCompetition])assert.equal(accepts({country,name,type}),true,country+': '+name);
 });
-test('lower tiers, cups, international competitions, women/youth and unknown leagues are excluded',()=>{
- for(const [country,name] of [['Germany','2. Bundesliga'],['England','Championship'],['France','Ligue 2'],['Germany','DFB Pokal'],['World','UEFA Champions League'],['World','UEFA Europa League'],['Brazil','Serie B'],['Germany','Frauen Bundesliga'],['England','Premier League 2'],['Japan','J2 League'],['Croatia','First NL'],['Unknown','Premier League']])assert.equal(isTopFlight({country,name}),false,country+': '+name);
- assert.equal(isTopFlight({country:'Germany',name:'Bundesliga',type:'Cup'}),false);
+test('similar names never admit unlisted countries, competitions, youth or women leagues',()=>{
+ for(const [country,name] of [['Brazil','Serie A'],['England','Championship'],['France','Ligue 2'],['Germany','Frauen Bundesliga'],['England','Premier League 2'],['Croatia','First NL'],['Unknown','Premier League']])assert.equal(isScorerCompetition({country,name}),false,country+': '+name);
+ assert.equal(isScorerCompetition({country:'Germany',name:'Bundesliga',type:'Cup'}),false);
 });

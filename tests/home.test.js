@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const fn=(name,end)=>html.slice(html.indexOf('function '+name),html.indexOf(end,html.indexOf('function '+name)));
+test('missing scorer goals never turn into a zero-percent probability',()=>{
+ const context=vm.createContext({});vm.runInContext(fn('scorerChance','function homePlayerCard'),context);
+ const chance=context.scorerChance,base={GP:20,minutes:900,minutesPerGame:75};
+ for(const nhl of [true,false])for(const goals of [null,undefined,''])assert.equal(chance({...base,goals},nhl),null);
+ assert.equal(chance({...base,goals:0},false),0);
+ assert.ok(chance({...base,goals:8},false)>0);
+});
+test('home and combo cards disclose cup replacement statistics',()=>{
+ const context=vm.createContext({sport:'football',league:78,leagueSeason:()=>2026,playerKey:p=>'football:'+p.id,scorerChance:()=>null,homeProfiles:new Map(),favoritePlayers:new Map(),portrait:()=>'',positionBadge:()=>'',esc:s=>String(s).replaceAll('<','&lt;'),time:()=>'',fmt:v=>v??'–'});
+ vm.runInContext(fn('homePlayerCard','async function renderHome'),context);
+ const card=context.homePlayerCard({player:{id:1,name:'Player',statisticsSource:'Ligastatistik als Pokal-/Europapokal-Grundlage'},game:{league:{name:'Champions League',season:2026},fixture:{date:'2026-11-04'},teams:{away:{name:'Away'}}}},0);
+ assert.match(card,/Ligastatistik als Pokal-/);
+ assert.match(html.slice(html.indexOf('function renderScorerSelection'),html.indexOf('async function generate')),/statisticsSource/);
+});
+test('a scorer provider failure remains an error and can be retried',async()=>{
+ let dashboardData,painted=false;const elements={homePlayers:{},homeSubtitle:{},date:{value:'2026-11-04'}};
+ const context=vm.createContext({homeToken:0,homeKey:()=> 'key',homeCache:new Map(),dashboard:d=>{dashboardData=d},$:id=>elements[id],games:[{fixture:{date:new Date(Date.now()+3600000).toISOString(),status:{short:'NS'}},league:{id:78}}],league:78,sport:'football',demoMode:false,view:'home',fetch:async()=>({ok:false,json:async()=>({error:'Anbieterlimit erreicht'})}),URLSearchParams,paintHome:()=>{painted=true},esc:s=>s});
+ const start=html.indexOf('async function renderHome()'),end=html.indexOf('async function seasonHome',start);
+ vm.runInContext(html.slice(start,end),context);await context.renderHome();
+ assert.equal(painted,false);assert.equal(dashboardData.error,true);assert.match(elements.homePlayers.innerHTML,/Anbieterlimit erreicht/);assert.match(elements.homePlayers.innerHTML,/retryHome/);assert.equal(context.homeCache.size,0);
+});
