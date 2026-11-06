@@ -1,3 +1,7 @@
+export function hasNhlLineup(side){
+ return side?.forwards?.length>=9&&side?.defense?.length>=4&&side?.goalies?.length>=1;
+}
+
 // Position-based orientation only; a boxscore does not prove real combinations.
 export function buildNhlLines(forwards=[],defense=[],roster=[]){
  const used=new Set();
