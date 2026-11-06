@@ -1,3 +1,4 @@
+import {buildNhlLines, hasNhlLineup} from '../public/nhl-lines.js';
 import {nhlReference,scorerRole} from '../lib/lineup-reference.js';
 const ROOT='https://api-web.nhle.com/v1';
 const cache=new Map();
@@ -102,9 +103,30 @@ export default async function handler(req,res){
     const match=upcoming.find(g=>g.home===p.team||g.away===p.team);
     p.opponent=match?(match.home===p.team?match.away:match.home):null;p.fixtureId=match?.id??null;
   }
-  const references=new Map();let refNext=0;
-  await Promise.all(Array.from({length:2},async()=>{while(refNext<clubs.length){const club=clubs[refNext++],game=upcoming.find(g=>g.home===club||g.away===club);try{const box=await fetchJson('/gamecenter/'+game.id+'/boxscore'),side=box.playerByGameStats?.[box.homeTeam?.abbrev===club?'homeTeam':'awayTeam'];references.set(club,side?.forwards?.length?{source:'current',side,date:game.start}:await nhlReference(club,game.start,fetchJson))}catch{try{references.set(club,await nhlReference(club,game.start,fetchJson))}catch{}}}}));
-  for(const p of players){const ref=references.get(p.team),slot=ref?.side.forwards?.find(x=>String(x.playerId)===String(p.id));p.lineupPosition=slot?.position||slot?.positionCode||(!ref?p.position:null);p.lineupSource=slot?ref.source:!ref?'season':null;p.lineupReferenceDate=ref?.date||null;if(p.lineupSource==='season')p.participation='Aufstellung offen · Saisonposition';if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Stürmer in verfügbarer Aufstellung';}
+  const references=new Map(), projectedLines=new Map();let refNext=0;
+  await Promise.all(Array.from({length:2},async()=>{
+   while(refNext<clubs.length){
+    const club=clubs[refNext++],game=upcoming.find(g=>g.home===club||g.away===club);
+    const box=await fetchJson('/gamecenter/'+game.id+'/boxscore').catch(()=>null);
+    const side=box?.playerByGameStats?.[box.homeTeam?.abbrev===club?'homeTeam':'awayTeam'];
+    const previous=await nhlReference(club,game.start,fetchJson).catch(()=>null);
+    references.set(club,side?.forwards?.length?{source:'current',side,date:game.start}:previous);
+    // The pregame Aufstellungen tab uses the previous game as its reference.
+    if(hasNhlLineup(previous?.side)){
+     const lines=buildNhlLines(previous.side.forwards,previous.side.defense);
+     projectedLines.set(club,new Map(lines.flatMap((line,index)=>line.forwards.filter(Boolean).map(player=>[String(player.playerId||player.id),index+1]))));
+    }
+   }
+  }));
+  for(const p of players){
+   const ref=references.get(p.team),slot=ref?.side.forwards?.find(x=>String(x.playerId)===String(p.id));
+   p.lineupPosition=slot?.position||slot?.positionCode||(!ref?p.position:null);
+   p.lineupSource=slot?ref.source:!ref?'season':null;
+   p.lineupReferenceDate=ref?.date||null;
+   p.projectedLine=projectedLines.get(p.team)?.get(String(p.id))??null;
+   if(p.lineupSource==='season')p.participation='Aufstellung offen · Saisonposition';
+   if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Stürmer in verfügbarer Aufstellung';
+  }
   const eligiblePlayers=players.filter(p=>!p.exclusionReason&&p.fixtureId!=null&&p.GP>=10&&p.goals>=3&&p.shotsPerGame>=1.5&&(req.query.confirmed!=='1'||p.participation==='Bestätigter Einsatz'));
 
   // Never force a low-ranked scorer solely to represent every fixture.
