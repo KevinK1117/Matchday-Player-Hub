@@ -17,3 +17,10 @@ test('up to four distinct players per fixture; duplicate rows do not inflate sel
  const r=rankScorers(games,[...ps,...ps],10,now);assert.equal(r.picks.length,8);assert.equal(r.complete,false);assert.equal(new Set(r.picks.map(p=>p.player.id)).size,8);
  for(const g of games)assert.ok(r.picks.filter(p=>p.game.fixture.id===g.fixture.id).length<=4);
 });
+test('NHL combos exclude centers from current, historical and season data',()=>{
+ for(const lineupSource of ['current','last','season']){
+  const center={...base,id:1,fixtureId:1,sport:'nhl',GP:15,lineupSource,lineupPosition:'C'};
+  const wing={...center,id:2,lineupPosition:'RW'};
+  assert.deepEqual(rankScorers(games,[center,wing],6,now).picks.map(p=>p.player.id),[2]);
+ }
+});

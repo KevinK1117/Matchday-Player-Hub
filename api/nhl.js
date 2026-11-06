@@ -125,13 +125,13 @@ export default async function handler(req,res){
    p.lineupReferenceDate=ref?.date||null;
    p.projectedLine=projectedLines.get(p.team)?.get(String(p.id))??null;
    if(p.lineupSource==='season')p.participation='Aufstellung offen · Saisonposition';
-   if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Stürmer in verfügbarer Aufstellung';
+   if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Außenstürmer in verfügbarer Aufstellung';
   }
   const eligiblePlayers=players.filter(p=>!p.exclusionReason&&p.fixtureId!=null&&p.GP>=10&&p.goals>=3&&p.shotsPerGame>=1.5&&(req.query.confirmed!=='1'||p.participation==='Bestätigter Einsatz'));
 
   // Never force a low-ranked scorer solely to represent every fixture.
   const picked=eligiblePlayers.slice(0,count);
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Schussbasiertes Modell mit geglätteter Trefferquote, begrenzter Anpassung an jüngstes Schussvolumen und Gegner-Gegentore. Center und Außenstürmer zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Schussbasiertes Modell mit geglätteter Trefferquote, begrenzter Anpassung an jüngstes Schussvolumen und Gegner-Gegentore. Nur Außenstürmer zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
 
