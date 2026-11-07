@@ -937,16 +937,20 @@ function renderDrawCoverage(data){
 let drawToken=0;
 $('drawGenerate').onclick=async()=>{
  const token=++drawToken,b=$('drawGenerate'),out=$('drawResult'),date=$('date').value,wanted=$('drawCount').value,count=wanted==='all'?Infinity:Number(wanted),pool=new Map();
- const scanAt=Date.now();let offset=0,scanned=0,total=0,complete=false,errors=0,stopped=false;
+ const scanAt=Date.now();let offset=0,scanned=0,total=0,complete=false,errors=0,stopped=false,retries=0,received=false;
  b.disabled=true;
- const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+scanned+' / '+total+' Spiele geprüft · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':stopped?' · Analyse unterbrochen':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
+ const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+(received?scanned+' / '+total+' Spiele geprüft':'Spielplan konnte noch nicht geladen werden')+' · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':stopped?' · Analyse unterbrochen':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}
   out.textContent='Alle Spiele des Spieltags werden schrittweise geprüft …';
   do{
    const r=await fetch('/api/draws?'+new URLSearchParams({date,count:'all',batch:'1',offset:String(offset),scanAt:String(scanAt)})),d=await r.json();
    if(token!==drawToken)return;
-   if(!r.ok||d.configured===false)throw Error(d.error||d.notice||'Analyse fehlgeschlagen');
+   if(!r.ok||d.configured===false){
+    if(d.retryAfter&&retries<2){retries++;out.innerHTML='<p class="result-status">'+esc(d.error)+' Neuer Versuch in '+Number(d.retryAfter)+' Sekunden.</p>';await new Promise(resolve=>setTimeout(resolve,Math.min(90,Number(d.retryAfter))*1000));if(token!==drawToken)return;continue}
+    throw Error(d.error||d.notice||'Analyse fehlgeschlagen');
+   }
+   received=true;retries=0;
    total=d.totalFixtures;scanned+=d.considered;errors+=d.diagnostics?.providerErrors||0;
    for(const p of [...(d.verifiedCandidates||[]),...(d.provisionalCandidates||[])]){const old=pool.get(p.fixtureId);if(!old||p.score>old.score)pool.set(p.fixtureId,p)}
    complete=d.scanComplete;paint();
