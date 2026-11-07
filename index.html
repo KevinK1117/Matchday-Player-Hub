@@ -937,9 +937,9 @@ function renderDrawCoverage(data){
 let drawToken=0;
 $('drawGenerate').onclick=async()=>{
  const token=++drawToken,b=$('drawGenerate'),out=$('drawResult'),date=$('date').value,wanted=$('drawCount').value,count=wanted==='all'?Infinity:Number(wanted),pool=new Map();
- const scanAt=Date.now();let offset=0,scanned=0,total=0,complete=false,errors=0;
+ const scanAt=Date.now();let offset=0,scanned=0,total=0,complete=false,errors=0,stopped=false;
  b.disabled=true;
- const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+scanned+' / '+total+' Spiele geprüft · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
+ const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+scanned+' / '+total+' Spiele geprüft · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':stopped?' · Analyse unterbrochen':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}
   out.textContent='Alle Spiele des Spieltags werden schrittweise geprüft …';
@@ -950,10 +950,13 @@ $('drawGenerate').onclick=async()=>{
    total=d.totalFixtures;scanned+=d.considered;errors+=d.diagnostics?.providerErrors||0;
    for(const p of [...(d.verifiedCandidates||[]),...(d.provisionalCandidates||[])]){const old=pool.get(p.fixtureId);if(!old||p.score>old.score)pool.set(p.fixtureId,p)}
    complete=d.scanComplete;paint();
-   if(!complete&&(d.diagnostics?.providerPaused||!(d.nextOffset>offset)))throw Error('Datenanbieter pausiert. Analyse unvollständig; bitte später erneut starten.');
+   if(!complete&&(d.diagnostics?.providerPaused||!(d.nextOffset>offset))){
+    const reasons=(d.diagnostics?.errorReasons||[]).map(x=>x.reason).filter(x=>!x.startsWith('Anbieterpause'));
+    throw Error('Analyse unterbrochen: '+(reasons.join(' · ')||(d.diagnostics?.providerPaused?'Anbieter-Anfragelimit oder Kontingentpause':'Kein weiterer Analysefortschritt'))+'. '+scanned+' von '+total+' Spielen geprüft. Vorhandene Tipps bleiben sichtbar; eine vollständige Kombi ist nicht bestätigt. Bei API-Zugriff/Abonnement muss der Anbieterzugang geprüft werden.');
+   }
    offset=d.nextOffset;
   }while(!complete);
- }catch(e){if(token===drawToken){if(pool.size)paint();else out.innerHTML='';out.insertAdjacentHTML('afterbegin','<p class="result-status">'+esc(e.message||'Analyse unterbrochen')+'</p>')}}
+ }catch(e){if(token===drawToken){stopped=true;paint();out.insertAdjacentHTML('afterbegin','<p class="result-status">'+esc(e.message||'Analyse unterbrochen')+'</p>')}}
  finally{if(token===drawToken)b.disabled=false}
 };
 
