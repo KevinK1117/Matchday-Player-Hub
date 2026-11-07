@@ -352,7 +352,7 @@ html[data-theme="dark"] .pitch[data-sport="football"] .pitch-person{color:#fff!i
 </style><style id="unified-player-cards">
 /* All scorer summaries use the Eishockey Home structure and the same dimensions. */
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card{box-sizing:border-box!important;display:grid!important;grid-template-rows:minmax(0,1fr) 62px 32px!important;gap:6px!important;width:100%!important;max-width:680px!important;height:270px!important;min-height:270px!important;padding:13px!important;margin:0 auto 12px!important;border:1px solid var(--line)!important;border-radius:17px!important;overflow:hidden!important}
-#comboResult .scorer-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:0!important;width:100%!important;max-width:680px!important;margin:0 auto!important}
+#homePlayers,#comboResult .scorer-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:0!important;width:min(680px,calc(100vw - 40px))!important;max-width:none!important;margin:0!important;position:relative;left:50%;transform:translateX(-50%)}
 body[data-view="combo"] #combo-card{border:0!important}
 body[data-view="combo"] #combo-card .combo-body,body[data-view="combo"] #combo-card .combo-tab-panel{padding-left:0!important;padding-right:0!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .home-player-top{display:grid!important;grid-template-columns:30px minmax(0,1fr) 74px!important;align-items:center!important;gap:8px!important;min-height:0!important}
@@ -363,7 +363,7 @@ body[data-view="combo"] #combo-card .combo-body,body[data-view="combo"] #combo-c
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .home-profile small{font-size:11px!important;line-height:1.35!important;margin-top:3px!important;display:block!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .summary-match{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .goal-badge{width:74px!important;min-width:74px!important;padding:11px 5px!important;border-radius:13px!important}
-:is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .goal-badge strong{font-size:22px!important;line-height:1.15!important}
+:is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .goal-badge strong{font-size:20px!important;line-height:1.15!important;white-space:nowrap!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .goal-badge span{font-size:9px!important;line-height:1.35!important;margin-top:5px!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .home-player-metrics{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;margin:0!important;min-width:0!important}
 :is(#homePlayers,#comboResult,#favoriteContent) .player-summary-card .home-player-metrics>div{min-width:0!important;border:0!important;border-radius:10px!important;padding:7px 4px!important;background:#f5f7fa}
