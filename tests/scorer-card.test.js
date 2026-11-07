@@ -9,9 +9,9 @@ test('compact scorer card highlights only key statistics while profile retains s
  vm.runInContext(source,context);
  const p={id:1,GP:20,goals:8,shotsPerGame:3,last5Goals:4,last5:[{},{},{},{},{}],last10Games:10,last10Shots:30,xGPerGame:0,highDangerChancesPerGame:null,ppgoals:2,opponentGoalsAgainstPerGame:3.1,toiLast5:1200};context.p=p;
  const card=vm.runInContext('scorerKeyMetrics(p,true)',context);
- for(const label of ['Tore / Spiel','Aufs Tor / Spiel','Tore · letzte 5','Schüsse · letzte 10','xG / Spiel','iHDCF / Spiel'])assert.ok(card.includes(label));
- for(const label of ['PP-Tore','Schussquote','Gegentore','Eiszeit'])assert.ok(!card.includes(label));
- assert.match(card,/0,00/);assert.match(card,/Nicht verfügbar/);
+ for(const label of ['Tore / Spiel','Aufs Tor / Spiel','Schüsse · letzte 10'])assert.ok(card.includes(label));
+ for(const label of ['PP-Tore','Schussquote','Gegentore','Eiszeit','Tore · letzte 5','xG / Spiel','iHDCF / Spiel'])assert.ok(!card.includes(label));
+ assert.equal((card.match(/<b>/g)||[]).length,3);assert.match(card,/0,40/);
  vm.runInContext("scorerProfiles.set('nhl:1',p)",context);
  const profile=vm.runInContext('scorerProfileDetails(1,true)',context);
  for(const label of ['Powerplay-Tore','Schussquote','Gegner · Gegentore','Ø Eiszeit'])assert.ok(profile.includes(label));
