@@ -386,6 +386,14 @@ body[data-view="combo"] #combo-card .combo-body,body[data-view="combo"] #combo-c
 #combo-card .draw-summary-card .home-player-metrics>div:first-child{padding:5px 4px!important}
 #combo-card .draw-summary-card .home-player-metrics>div:first-child span{font-size:9px!important}
 #combo-card .draw-summary-card .home-player-metrics>div:first-child b{font-size:12px!important;line-height:1.1!important}
+/* Draw metrics can wrap; every row must grow with its content. */
+#combo-card #drawResult .draw-summary-card,
+#combo-card #drawResult .draw-summary-card:has(.tip-summary-details[open]){height:auto!important;min-height:250px!important;grid-template-rows:minmax(128px,auto) auto auto!important;gap:10px!important;overflow:visible!important}
+#combo-card #drawResult .draw-summary-card .home-player-metrics{align-items:stretch!important}
+#combo-card #drawResult .draw-summary-card .home-player-metrics>div{height:auto!important;min-height:74px!important;box-sizing:border-box!important;padding:8px 5px!important}
+#combo-card #drawResult .draw-summary-card .home-player-metrics span{min-height:26px;overflow-wrap:anywhere}
+#combo-card #drawResult .draw-summary-card .home-player-metrics b{font-size:14px!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere}
+#combo-card #drawResult .draw-summary-card .tip-summary-details{position:static!important;margin:0!important;min-width:0!important}
 #combo-card .tip-summary-card .live-evidence{font-size:11px}
 #combo-card .tip-summary-card .rank-number{font-size:15px}
 html[data-theme="dark"] #combo-card .tip-summary-card{background:#182434!important;color:#edf3fb!important;border-color:#36465b!important}
