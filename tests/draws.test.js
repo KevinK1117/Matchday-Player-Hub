@@ -31,3 +31,14 @@ test('analysis bounds provider concurrency and shares league standings requests'
  try{await handler({query:{date:'2099-10-23',count:'6'}},res);assert(maxActive<=3);assert.equal(standingsRequests,1)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });
 
+
+test('batched whole-matchday scan retains more than twenty signals from every supplied league',async()=>{
+ const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';
+ const league={id:9999,name:'Other League',country:'Other',season:2099};
+ const games=Array.from({length:26},(_,i)=>({fixture:{id:800000+i,date:'2099-11-07T20:00:00Z',status:{short:'NS'}},league,teams:{home:{id:700000+i*2,name:'Home '+i},away:{id:700001+i*2,name:'Away '+i}}}));
+ globalThis.fetch=async input=>{const u=new URL(input);let response=[];
+ if(u.pathname==='/fixtures'&&u.searchParams.has('date'))response=games;
+ else if(u.pathname==='/fixtures'&&u.searchParams.has('team')){const id=Number(u.searchParams.get('team'));response=Array.from({length:10},(_,i)=>({fixture:{id:id*100+i,date:'2099-10-'+String(10+i).padStart(2,'0'),status:{short:'FT'}},league,teams:i%2?{home:{id},away:{id:999}}:{home:{id:999},away:{id}},goals:{home:1,away:1}}))}
+ return {ok:true,json:async()=>({response})};};
+ try{let offset=0,finished=false;const seen=new Set();while(!finished){let body;await handler({query:{date:'2099-11-07',count:'all',batch:'1',offset:String(offset)}},{setHeader(){},status(){return this},json(d){body=d}});assert.equal(body.totalFixtures,26);assert(body.considered<=2);assert(body.nextOffset>offset);for(const p of body.candidates){seen.add(p.fixtureId);assert.equal(p.injuriesAvailable,true);assert.deepEqual(p.lineup,{home:false,away:false});assert(p.homeForm.homeScored>0);assert(p.awayForm.awayPoints>0)}offset=body.nextOffset;finished=body.scanComplete}assert.equal(offset,26);assert.equal(seen.size,26)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
+});
