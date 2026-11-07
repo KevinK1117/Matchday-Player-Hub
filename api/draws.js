@@ -213,6 +213,13 @@ async function evaluate(g,key,date,independent,additional){
   return {...p,score:Math.max(0,Math.min(88,p.score)),externalForm:externalHome&&externalAway?{sources:[...new Set([...externalHome.sources,...externalAway.sources])],homeMatches:externalHome.played,awayMatches:externalAway.played,weight:.15}:null,independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
  }).sort((x,y)=>y.score-x.score)};
 }
+export function analysisFailure(error){
+ const message=String(error?.message||error);
+ if(/API_PAUSED|HTTP 429|rate.limit|too many|quota|requests.limit/i.test(message))return {status:503,error:'Anbieter-Anfragelimit erreicht. Die Analyse wird nach einer Pause erneut versucht.',code:'PROVIDER_LIMIT',retryAfter:90};
+ if(/HTTP 401|HTTP 403|subscription|access|plan/i.test(message))return {status:502,error:'Anbieterzugang für diesen Datenabruf nicht freigeschaltet. Zugang oder Abonnement beim Anbieter prüfen.',code:'PROVIDER_ACCESS'};
+ if(/timeout|abort|HTTP 5\d\d|fetch failed/i.test(message))return {status:503,error:'Datenanbieter vorübergehend nicht erreichbar. Erneuter Versuch folgt.',code:'PROVIDER_TEMPORARY',retryAfter:15};
+ return {status:502,error:'Analyse fehlgeschlagen. Bitte später erneut versuchen.',code:'ANALYSIS_FAILED'};
+}
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');
  const date=String(req.query?.date||''),allTips=req.query?.count==='all',count=allTips?100000:Number(req.query?.count||6),batched=req.query?.batch==='1',offset=Number(req.query?.offset||0),scanAt=Number(req.query?.scanAt||Date.now());
@@ -306,5 +313,5 @@ export default async function handler(req,res){
   if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht zusätzlich bestätigt.';
   if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
   return res.status(200).json({configured:true,date,nextOffset:offset+considered,scanComplete:!batched||offset+considered>=totalOrdered,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
- }catch(e){return res.status(502).json({error:'Analyse derzeit nicht verfügbar',detail:String(e.message).slice(0,120)})}
+ }catch(e){const {status,...failure}=analysisFailure(e);if(failure.retryAfter)res.setHeader('Retry-After',String(failure.retryAfter));return res.status(status).json(failure)}
 }
