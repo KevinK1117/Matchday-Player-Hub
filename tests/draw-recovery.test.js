@@ -15,6 +15,16 @@ test('initial transient failure retries the same batch and finishes without a fa
  const code=html.slice(start,html.indexOf('function leagueSeason',start));
  const elements={drawGenerate:{},drawResult:{innerHTML:'',insertAdjacentHTML(_,s){this.innerHTML=s+this.innerHTML}},date:{value:'2099-11-07'},drawCount:{value:'all'}};
  let calls=0;const urls=[];
- const context=vm.createContext({$:id=>elements[id],drawToken:0,demoMode:false,Map,Date,Number,Infinity,URLSearchParams,esc:s=>s,setTimeout:fn=>fn(),drawPickCard:()=>'',fetch:async url=>{urls.push(url);calls++;return calls===1?{ok:false,json:async()=>({error:'Temporary',retryAfter:15})}:{ok:true,json:async()=>({totalFixtures:2,considered:2,scanComplete:true,diagnostics:{},verifiedCandidates:[],provisionalCandidates:[]})}}});
+ const context=vm.createContext({$:id=>elements[id],sport:'football',drawToken:0,demoMode:false,Map,Date,Number,Infinity,URLSearchParams,esc:s=>s,setTimeout:fn=>fn(),drawPickCard:()=>'',fetch:async url=>{urls.push(url);calls++;return calls===1?{ok:false,json:async()=>({error:'Temporary',retryAfter:15})}:{ok:true,json:async()=>({totalFixtures:2,considered:2,scanComplete:true,diagnostics:{},verifiedCandidates:[],provisionalCandidates:[]})}}});
  vm.runInContext(code,context);await elements.drawGenerate.onclick();assert.equal(calls,2);assert.equal(urls[0],urls[1]);assert.match(elements.drawResult.innerHTML,/2 \/ 2 Spiele geprüft/);assert.match(elements.drawResult.innerHTML,/Analyse beendet/);assert.equal(elements.drawGenerate.disabled,false);
+});
+
+test('hockey cannot start a football draw analysis',async()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const start=html.indexOf('function syncDrawSport(){');
+ const code=html.slice(start,html.indexOf('function leagueSeason',start));
+ const elements={drawGenerate:{},drawResult:{}};
+ const context=vm.createContext({sport:'nhl',$:id=>elements[id],fetch:()=>{throw Error('Unexpected football request')}});
+ vm.runInContext(code,context);await elements.drawGenerate.onclick();
+ assert.equal(elements.drawGenerate.disabled,true);assert.match(elements.drawResult.textContent,/nur für Fußball/);
 });
