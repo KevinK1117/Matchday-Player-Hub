@@ -13,7 +13,7 @@ test('missing scorer goals never turn into a zero-percent probability',()=>{
 });
 test('home and combo cards disclose cup replacement statistics',()=>{
  const context=vm.createContext({sport:'football',league:78,leagueSeason:()=>2026,playerKey:p=>'football:'+p.id,scorerChance:()=>null,homeProfiles:new Map(),favoritePlayers:new Map(),portrait:()=>'',positionBadge:()=>'',esc:s=>String(s).replaceAll('<','&lt;'),time:()=>'',fmt:v=>v??'–'});
- vm.runInContext(fn('homePlayerCard','async function renderHome'),context);
+ vm.runInContext(fn('summaryKickoff','async function renderHome'),context);
  const card=context.homePlayerCard({player:{id:1,name:'Player',statisticsSource:'Ligastatistik als Pokal-/Europapokal-Grundlage'},game:{league:{name:'Champions League',season:2026},fixture:{date:'2026-11-04'},teams:{away:{name:'Away'}}}},0);
  assert.match(card,/Ligastatistik als Pokal-/);
  assert.match(html.slice(html.indexOf('function renderScorerSelection'),html.indexOf('async function generate')),/statisticsSource/);
@@ -33,3 +33,12 @@ test('home season fallback includes centers but never excluded players',async()=
 });
 
 test('NHL displayed chance uses the same expected goal rate as ranking',()=>{const c=vm.createContext({});vm.runInContext(fn('scorerChance','function homePlayerCard'),c);assert.equal(c.scorerChance({goals:10,GP:20},true),null);assert.ok(Math.abs(c.scorerChance({goals:10,GP:20,score:.3},true)-100*(1-Math.exp(-.3)))<1e-9)});
+
+test('kickoff labels use German time across midnight and daylight saving and preserve missing times',()=>{
+ const c=vm.createContext({esc:v=>String(v),time:v=>new Date(v).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})});
+ vm.runInContext(fn('summaryKickoff','function homePlayerCard'),c);
+ const label=date=>c.summaryKickoff({fixture:{date}});
+ assert.match(label('2026-11-07T23:30:00Z'),/08\.11\. · 00:30 Uhr/);
+ assert.match(label('2026-07-07T18:30:00Z'),/07\.07\. · 20:30 Uhr/);
+ for(const value of [undefined,'','bad-date'])assert.match(label(value),/Uhrzeit offen/);
+});
