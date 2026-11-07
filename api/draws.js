@@ -59,6 +59,7 @@ function providerPercent(value){
  return Number.isFinite(n)&&n>=0&&n<=100?n/100:null;
 }
 async function enrichCandidates(candidates,key,date){
+ if(!candidates.length)return {candidates:[],screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0};
  // Fetch predictions only for matches that passed form and table screening.
  // The browser pages the matchday; no global candidate limit.
  let injuries=[],injuriesAvailable=false;
@@ -244,17 +245,11 @@ export default async function handler(req,res){
    const ai=preferred.indexOf(a),bi=preferred.indexOf(b);
    return (ai<0?999:ai)-(bi<0?999:bi)||a-b;
   });
-  // All enabled competitions enter one common pool. Rotate over every league
-  // before requesting another fixture from a league; do not omit small leagues.
-  let selected=[];
-  while(order.some(id=>groups.get(id).length)){
-   for(const id of order){
-    const fixture=groups.get(id).shift();
-    if(fixture)selected.push(fixture);
-   }
-  }
+  // Keep each league together so adjacent batches reuse standings and histories.
+  // Every returned fixture remains in the scan, including smaller competitions.
+  let selected=order.flatMap(id=>groups.get(id));
   const totalOrdered=selected.length;
-  if(batched)selected=selected.slice(offset,offset+2);
+  if(batched)selected=selected.slice(offset,offset+8);
   // Strict server budget avoids a 60-second HTTP timeout on busy days.
   // Unchecked fixtures remain visible as 'not_checked', never reported as analyzed.
   const results=new Array(selected.length);
