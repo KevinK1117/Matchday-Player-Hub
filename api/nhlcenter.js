@@ -1,3 +1,4 @@
+import {recentScorerForm} from '../lib/scorer-analysis.js';
 import {nhlTeamHistory} from '../lib/player-history.js';
 import {nhlReference} from '../lib/lineup-reference.js';
 import {nhlClock} from '../public/match-clock.js';
@@ -139,7 +140,7 @@ export default async function handler(req,res){
  return {player:{id:p.id,photo:p.headshot||null,name:value(p.firstName)+' '+value(p.lastName)},statistics:[{team:{name:p.teamAbbrev},goals:{total:goals}}],modelPlayer:{id:p.id,name:value(p.firstName)+' '+value(p.lastName),photo:p.headshot,team:p.teamAbbrev,position:st?.positionCode,GP:gp??null,goals,shots:shots??null,shotsPerGame:gp>0&&shots!=null?shots/gp:null,participation:'Saisonmodell · kein Einsatz bestätigt'}};
  }).filter(p=>['C','L','R','LW','RW'].includes(p.modelPlayer.position));
  }
- if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);let standings=[];try{standings=(await fetchJson('/standings/now')).standings||[]}catch{}data={...p,teamHistory:nhlTeamHistory(p,standings),last5Games:recent,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
+ if(a==='player'){const p=await fetchJson('/player/'+q.id+'/landing');const current=(p.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0];const recent=(p.last5Games||[]).filter(g=>g.gameDate&&Date.parse(g.gameDate)<=Date.now()).slice(0,5);let last10Games=[];if(current){try{const log=await fetchJson('/player/'+q.id+'/game-log/'+current.season+'/2');last10Games=recentScorerForm(log.gameLog||[],new Date(Date.now()+86400000).toISOString().slice(0,10)).last10;}catch{last10Games=recent;}}let standings=[];try{standings=(await fetchJson('/standings/now')).standings||[]}catch{}data={...p,teamHistory:nhlTeamHistory(p,standings),last5Games:recent,last10Games,recentSummary:summarizeLastFive(recent),xg:current?await getPlayerXg(q.id,'nhl',current.season):null};}
  if(a==='lineup-reference'){
   const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
   if(![box.homeTeam?.abbrev,box.awayTeam?.abbrev].includes(q.team))return res.status(400).json({error:'Team nicht im Spiel'});

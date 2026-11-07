@@ -1,3 +1,5 @@
+import {recentScorerForm, stabilizedShootingRate} from '../lib/scorer-analysis.js';
+import {getPlayerXg} from '../lib/player-metrics.js';
 import {buildNhlLines, hasNhlLineup} from '../public/nhl-lines.js';
 import {nhlReference,scorerRole} from '../lib/lineup-reference.js';
 const ROOT='https://api-web.nhle.com/v1';
@@ -29,7 +31,7 @@ export default async function handler(req,res){
     const goalsPerGame=goals/gp, shotsPerGame=shots==null?null:shots/gp;
     // Shrink early-season shooting percentage toward a conservative 10% baseline.
     // This avoids overrating players with a few goals on very few shots.
-    const adjustedRate=shots>0?(goals+0.10*35)/(shots+35):0;
+    const adjustedRate=stabilizedShootingRate({goals,shots},[],Infinity);
     const expectedGoalsPerGame=shotsPerGame==null?0:shotsPerGame*Math.min(.20,adjustedRate);
     const ppRole=ppgoals==null?0:Math.min(.12,ppgoals/Math.max(gp,1)*.20);
     const score=expectedGoalsPerGame;
@@ -62,14 +64,24 @@ export default async function handler(req,res){
   }catch{}
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
   // A large parallel fan-out caused NHL API 429. Enrich only selected top-ranked players, sequentially.
-  const shortlist=players.filter(p=>['C','L','R','LW','RW'].includes(p.position)).slice(0,16);
+  const shortlist=players.filter(p=>['L','R','LW','RW'].includes(p.position)).slice(0,16);
   const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
   let stoppedForRateLimit=false;
   for(const p of shortlist){
     if(stoppedForRateLimit)break;
     try{
       const log=await fetchJson(`/player/${p.id}/game-log/${yr}${yr+1}/2`);
-      const entries=(log.gameLog||[]).filter(g=>g.gameDate && g.gameDate<date).sort((a,b)=>String(b.gameDate).localeCompare(String(a.gameDate))).slice(0,5);
+      Object.assign(p,recentScorerForm(log.gameLog||[],date));
+      const entries=p.last10.slice(0,5);
+      const landing=await fetchJson(`/player/${p.id}/landing`).catch(()=>null);
+      if(landing?.currentTeamAbbrev){p.rosterChecked=true;if(landing.currentTeamAbbrev!==p.team){p.exclusionReason='Aktueller NHL-Kader widerspricht Teamzuordnung';p.rosterMismatch=true;}}
+      p.shootingRate=stabilizedShootingRate(p,landing?.seasonTotals||[],Number(`${yr}${yr+1}`));
+      if(p.shotsPerGame!=null){const defense=p.defenseAdjustment??1;p.score=p.shotsPerGame*p.shootingRate*defense;}
+      p.xg=await getPlayerXg(p.id,'nhl',`${yr}${yr+1}`);
+      p.xGPerGame=p.xg?.xGPerGame??null;
+      p.highDangerChancesPerGame=p.xg?.highDangerChancesPerGame??null;
+      // Optional shot-quality evidence; keep the estimate explicitly uncalibrated.
+      if(p.xGPerGame!=null)p.score=.75*p.score+.25*p.xGPerGame;
       p.last5=entries.map(g=>({date:g.gameDate,goals:g.goals??null,shots:g.shots??null,toi:g.toi??null,powerPlayToi:g.powerPlayToi??null}));
       const times=entries.map(g=>sec(g.toi)).filter(v=>v!==null);
       p.toiLast5=times.length?times.reduce((a,b)=>a+b,0)/times.length:null;
@@ -83,10 +95,9 @@ export default async function handler(req,res){
   }
   // Re-rank with recent verified form and usage; unavailable detail adds no imaginary advantage.
   for(const p of players){
-    if(p.last5?.length>=3){
-      const n=p.last5.length;
-      const shots=p.last5Shots==null?null:p.last5Shots/n;
-      const goals=p.last5Goals==null?null:p.last5Goals/n;
+    if(p.last10?.length>=3){
+      const n=p.last10.length;
+      const shots=p.last10Shots==null?null:p.last10Shots/n;
       // Recent shooting volume matters more than a short-term scoring streak.
       const recentShotRate=shots==null?null:Math.min(8,shots);
       const seasonShotRate=p.shotsPerGame??0;
@@ -131,7 +142,7 @@ export default async function handler(req,res){
 
   // Never force a low-ranked scorer solely to represent every fixture.
   const picked=eligiblePlayers.slice(0,count);
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Schussbasiertes Modell mit geglätteter Trefferquote, begrenzter Anpassung an jüngstes Schussvolumen und Gegner-Gegentore. Nur Außenstürmer zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte fünf Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG nicht verfügbar. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,method:'Schussbasiertes Modell mit langfristig geglätteter Trefferquote mit Schussvolumen der letzten zehn Spiele, Gegner-Gegentoren und optional verifiziertem Spieler-xG. Nur Außenstürmer zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte zehn Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG und hochwertige Torchancen nur bei verifizierten Anbieterwerten. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
 
