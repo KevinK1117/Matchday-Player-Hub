@@ -383,6 +383,9 @@ body[data-view="combo"] #combo-card .combo-body,body[data-view="combo"] #combo-c
 #combo-card .tip-summary-card .tip-summary-details>summary{cursor:pointer;color:var(--green);padding:6px 0;min-height:28px;box-sizing:border-box}
 #combo-card .tip-summary-card .tip-summary-details p{font-size:11px;line-height:1.5;margin:8px 0}
 #combo-card .tip-summary-card:has(.tip-summary-details[open]){height:auto!important;grid-template-rows:128px 58px auto!important;overflow:visible!important}
+#combo-card .draw-summary-card .home-player-metrics>div:first-child{padding:5px 4px!important}
+#combo-card .draw-summary-card .home-player-metrics>div:first-child span{font-size:9px!important}
+#combo-card .draw-summary-card .home-player-metrics>div:first-child b{font-size:12px!important;line-height:1.1!important}
 #combo-card .tip-summary-card .live-evidence{font-size:11px}
 #combo-card .tip-summary-card .rank-number{font-size:15px}
 html[data-theme="dark"] #combo-card .tip-summary-card{background:#182434!important;color:#edf3fb!important;border-color:#36465b!important}
@@ -836,7 +839,7 @@ async function nhlPlayer(id){const token=++modalToken;openModal('NHL-Torschütze
 
 function nhlTable(rows){return rows.length?`<div class="tablewrap"><table><tr><th>#</th><th>Team</th><th>Sp</th><th>Tore</th><th>Pkt</th></tr>${[...rows].sort((a,b)=>b.points-a.points).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.teamName?.default||r.teamAbbrev?.default)}</td><td>${fmt(r.gamesPlayed)}</td><td>${fmt(r.goalFor)}:${fmt(r.goalAgainst)}</td><td><b>${fmt(r.points)}</b></td></tr>`).join('')}</table></div>`:'<div class="empty">Tabelle nicht verfügbar.</div>'}
 async function loadScorers(g){const el=$('detailbody');el.innerHTML='<div class="loading">Topscorer laden …</div>';try{const rows=demoMode?demoPlayers:(await get({action:'scorers',league:g.league.id,season:g.league.season})).data;if(el!==$('detailbody')||tab!=='scorers')return;el.innerHTML=rows?.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${g.league.season}"><b>${i+1}</b>${portrait(p.player.id,sport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,g.league.season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.goals?.total)} Tore</small></span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar.</div>'}catch(e){if(el===$('detailbody')&&tab==='scorers')el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
-const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Nur ausgewählte Ligen aus deiner Liste + DFB-Pokal, Champions League, Europa League, WM, EM und Nations League. Priorität: Bundesliga, 2. Bundesliga, Serie A, Premier League, Ligue 1, La Liga und Saudi Pro League</p><label for="drawCount">Kombi-Größe</label><select id="drawCount">${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Tabellen-Außenseiter · Index ist keine Gewinnwahrscheinlichkeit.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
+const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Alle kommenden Fußballspiele des Spieltags werden schrittweise analysiert. Nur Spiele mit ausreichenden Daten und passendem Signal erscheinen als Tipp.</p><label for="drawCount">Kombi-Größe</label><select id="drawCount"><option value="all">Alle passenden Tipps</option>${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Statistische Außenseiter laut Tormodell · keine Einstufung anhand von Wettquoten.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
 backtestSection.innerHTML='<div class="backtest-wrap"><div class="eyebrow">FUSSBALL · QUALITÄTSCHECK</div><h2>Vergangene Tipps überprüfen</h2><p class="muted">Historische Spieltage werden ohne Daten aus der Zukunft bewertet. Ein Modell-Rücktest ist kein Nachweis früherer tatsächlich angezeigter Tipps.</p><div class="backtest-controls"><label for="backtestLeague">Wettbewerb</label><select id="backtestLeague" aria-label="Liga für Rücktest"></select><label for="backtestDays">Zeitraum</label><select id="backtestDays"><option value="14">Letzte 14 Tage</option><option value="30" selected>Letzte 30 Tage</option><option value="45">Letzte 45 Tage</option></select><button type="button" id="backtestRun" class="primary">Rücktest starten</button></div><div id="backtestResult" aria-live="polite"><p class="notice">Wähle eine Liga und starte den Vergleich mit vergangenen Ergebnissen.</p></div></div>';
 // Both panels must be inserted before binding their controls. A detached panel
 // caused a startup TypeError and left the Home page completely blank.
@@ -913,12 +916,13 @@ $('backtestRun').onclick=async()=>{
  finally{button.disabled=false}
 };
 
+function drawMetricNumber(v,digits){return v!=null&&Number.isFinite(Number(v))?Number(v).toFixed(digits).replace('.',','):'–'}
 function drawPickCard(p,i,isProvisional=false){
  const draw=p.type==='Unentschieden',pick=draw?'Remis nach 90 Minuten':String(p.team||'').replace(/^[12]\s*[·.-]\s*/,''),chance=p.modelProbability!=null?Number(p.modelProbability).toFixed(1)+' %':'– %';
- return `<article class="home-player-card player-summary-card tip-summary-card ${isProvisional?'is-provisional':''}">
+ return `<article class="home-player-card player-summary-card tip-summary-card draw-summary-card ${isProvisional?'is-provisional':''}">
  ${tipSummaryHeader({index:i,match:p.match,market:p.type+(draw?'':(' · '+pick)),league:p.league,game:{fixture:{date:p.kickoff}},chance,label:'Modell · unkalibriert'})}
- <div class="home-player-metrics"><div><span>Tabelle · Heim/Gast</span><b>${fmt(p.table?.home?.rank)}. / ${fmt(p.table?.away?.rank)}.</b></div><div><span>Form · letzte 5</span><b>${fmt(p.homeForm?.last5Points)} / ${fmt(p.awayForm?.last5Points)} Pkt</b></div><div><span>H2H · Remis</span><b>${p.h2h?.played?fmt(p.h2h.draws)+' / '+fmt(p.h2h.played):'–'}</b></div></div>
- <details class="tip-summary-details"><summary>Statistik &amp; Begründung</summary><p>${isProvisional?'Modell · unkalibriert':'Zusätzlich geprüft · unkalibriert'} · Geschätzte Wett-Trefferchance</p><p>Form: ${p.homeForm?.played>=6&&p.awayForm?.played>=6?'vorhanden':'eingeschränkt'} · Tabelle: ${p.table?.home?.rank!=null&&p.table?.away?.rank!=null?'vorhanden':'fehlt'} · H2H: ${p.h2h?.played?'vorhanden':'fehlt'} · Ausfälle: ${p.injuriesAvailable?'abgefragt':'fehlt'} · Zusatzprognose: ${p.providerPrediction!=null?'vorhanden':'fehlt'}</p>${p.externalForm?'<p>Zusatzdaten: '+esc(p.externalForm.sources.join(', '))+' · Heim/Gast '+esc(p.externalForm.homeMatches)+'/'+esc(p.externalForm.awayMatches)+' Spiele · Ergebnisform, keine unabhängige Prognosebestätigung.</p>':''}<p>Analyse-Index ${fmt(p.score)}/100 · ${esc(p.dataQuality||'Vorläufig')} · Poisson-Schätzung nicht kalibriert.</p><p>${esc(p.reason)}</p>${p.goals?.home!=null&&p.goals?.away!=null?tipLiveScore(p):''}${tipCompetition({name:p.league,country:p.country||p.leagueCountry})}${bet365FixtureLink(p.match)}</details></article>`;
+ <div class="home-player-metrics"><div><span>Tore / Gegentore · H/G</span><b>${p.homeForm&&p.awayForm?drawMetricNumber(p.homeForm.homeScored,1)+'/'+drawMetricNumber(p.homeForm.homeConceded,1)+' · '+drawMetricNumber(p.awayForm.awayScored,1)+'/'+drawMetricNumber(p.awayForm.awayConceded,1):'–'}</b></div><div><span>Heim-/Gastform · P/Spiel</span><b>${drawMetricNumber(p.homeForm?.homePoints,2)} / ${drawMetricNumber(p.awayForm?.awayPoints,2)}</b></div><div><span>Startelf H/G · Ausfälle</span><b>${p.lineup?.home?'✓':'?'} / ${p.lineup?.away?'✓':'?'} · ${p.injuriesAvailable?fmt(p.injuries?.homeMissing)+'/'+fmt(p.injuries?.awayMissing):'–'}</b></div></div>
+ <details class="tip-summary-details"><summary>Statistik &amp; Begründung</summary><p>H/G = Heim/Gast · Basis: ${fmt(p.homeForm?.homePlayed)} Heimspiele / ${fmt(p.awayForm?.awayPlayed)} Auswärtsspiele. Tore und Gegentore pro Spiel am jeweiligen Spielort. Form = Punkte pro Spiel. Startelf: ✓ veröffentlicht, ? offen. Ausfälle: gemeldete Anzahl; Bedeutung einzelner Spieler nicht bewertet.</p><p>Tabelle: ${fmt(p.table?.home?.rank)} / ${fmt(p.table?.away?.rank)} · Letzte 5: ${fmt(p.homeForm?.last5Points)} / ${fmt(p.awayForm?.last5Points)} Punkte · H2H: ${p.h2h?.played?fmt(p.h2h.draws)+'/'+fmt(p.h2h.played):'nicht verfügbar'}</p><p>${isProvisional?'Modell · unkalibriert':'Zusätzlich geprüft · unkalibriert'} · Geschätzte Wett-Trefferchance</p><p>Form: ${p.homeForm?.played>=6&&p.awayForm?.played>=6?'vorhanden':'eingeschränkt'} · Tabelle: ${p.table?.home?.rank!=null&&p.table?.away?.rank!=null?'vorhanden':'fehlt'} · H2H: ${p.h2h?.played?'vorhanden':'fehlt'} · Ausfälle: ${p.injuriesAvailable?'abgefragt':'fehlt'} · Zusatzprognose: ${p.providerPrediction!=null?'vorhanden':'fehlt'}</p>${p.externalForm?'<p>Zusatzdaten: '+esc(p.externalForm.sources.join(', '))+' · Heim/Gast '+esc(p.externalForm.homeMatches)+'/'+esc(p.externalForm.awayMatches)+' Spiele · Ergebnisform, keine unabhängige Prognosebestätigung.</p>':''}<p>Analyse-Index ${fmt(p.score)}/100 · ${esc(p.dataQuality||'Vorläufig')} · Poisson-Schätzung nicht kalibriert.</p><p>${esc(p.reason)}</p>${p.goals?.home!=null&&p.goals?.away!=null?tipLiveScore(p):''}${tipCompetition({name:p.league,country:p.country||p.leagueCountry})}${bet365FixtureLink(p.match)}</details></article>`;
 }
 
 function renderDrawCoverage(data){
@@ -932,16 +936,24 @@ function renderDrawCoverage(data){
 }
 let drawToken=0;
 $('drawGenerate').onclick=async()=>{
- const token=++drawToken,b=$('drawGenerate'),out=$('drawResult'),date=$('date').value,count=Number($('drawCount').value);
- b.disabled=true;out.textContent='Spiele und Datenqualität werden geprüft …';
+ const token=++drawToken,b=$('drawGenerate'),out=$('drawResult'),date=$('date').value,wanted=$('drawCount').value,count=wanted==='all'?Infinity:Number(wanted),pool=new Map();
+ const scanAt=Date.now();let offset=0,scanned=0,total=0,complete=false,errors=0;
+ b.disabled=true;
+ const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+scanned+' / '+total+' Spiele geprüft · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}
-  const r=await fetch('/api/draws?'+new URLSearchParams({date,count:String(count)}),{}),d=await r.json();
-  if(token!==drawToken)return;
-  if(!r.ok)throw Error(d.error||'Analyse fehlgeschlagen');
-  const all=d.candidates||[],verified=(d.verifiedCandidates||all.filter(x=>x.dataQuality!=='Vorläufig – nicht unabhängig bestätigt')).slice(0,count),provisional=(d.provisionalCandidates||all.filter(x=>x.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).slice(0,Math.max(0,count-verified.length));
-  out.innerHTML=verified.map((p,i)=>drawPickCard(p,i,false)).join('')+provisional.map((p,i)=>drawPickCard(p,i+verified.length,true)).join('')||'<p class="result-status">Keine passenden Tipps verfügbar.</p>';
- }catch(e){if(token===drawToken)out.textContent=e.name==='TimeoutError'?'Die Analyse hat das Zeitlimit überschritten. Bitte erneut versuchen.':e.message}
+  out.textContent='Alle Spiele des Spieltags werden schrittweise geprüft …';
+  do{
+   const r=await fetch('/api/draws?'+new URLSearchParams({date,count:'all',batch:'1',offset:String(offset),scanAt:String(scanAt)})),d=await r.json();
+   if(token!==drawToken)return;
+   if(!r.ok||d.configured===false)throw Error(d.error||d.notice||'Analyse fehlgeschlagen');
+   total=d.totalFixtures;scanned+=d.considered;errors+=d.diagnostics?.providerErrors||0;
+   for(const p of [...(d.verifiedCandidates||[]),...(d.provisionalCandidates||[])]){const old=pool.get(p.fixtureId);if(!old||p.score>old.score)pool.set(p.fixtureId,p)}
+   complete=d.scanComplete;paint();
+   if(!complete&&(d.diagnostics?.providerPaused||!(d.nextOffset>offset)))throw Error('Datenanbieter pausiert. Analyse unvollständig; bitte später erneut starten.');
+   offset=d.nextOffset;
+  }while(!complete);
+ }catch(e){if(token===drawToken){if(pool.size)paint();else out.innerHTML='';out.insertAdjacentHTML('afterbegin','<p class="result-status">'+esc(e.message||'Analyse unterbrochen')+'</p>')}}
  finally{if(token===drawToken)b.disabled=false}
 };
 
