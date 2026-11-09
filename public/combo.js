@@ -19,19 +19,21 @@ function eligibleScorer(p,confirmedOnly=false){
 }
 // The scorer combination is a sport-statistics ranking without bookmaker pricing.
 export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=false,options={}){
- if(!Number.isInteger(count)||count<6||count>20)throw Error('6–20 Spieler wählen');
+ if(!Number.isInteger(count)||count<1||count>20)throw Error('1–20 Spieler wählen');
  const fixtures=new Map(games.filter(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>now+300000).map(g=>[String(g.fixture.id),g]));
  const ranked=[];
  for(const p of players){
   const game=fixtures.get(String(p.fixtureId)),nhl=p.sport==='nhl';
+  if(options.strict&&!(nhl?p.participation==='Bestätigter Einsatz':p.participation==='Startelf bestätigt'))continue;
   if(!game||!eligibleScorer(p,confirmedOnly))continue;
   const analysis=options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;
   if(options.model==='three-factor'&&!analysis)continue;
   const score=analysis?analysis.expectedGoals:Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
   ranked.push({player:analysis?{...p,comboAnalysis:analysis}:p,game,score});
  }
+ const maxPerGame=options.strict?1:4;
  const seen=new Set(),perGame=new Map(),eligible=[];
- for(const p of ranked.sort((a,b)=>b.score-a.score)){const id=(p.player.sport||'football')+':'+p.player.id,fixture=String(p.game.fixture.id);if(seen.has(id)||(perGame.get(fixture)||0)>=4)continue;seen.add(id);perGame.set(fixture,(perGame.get(fixture)||0)+1);eligible.push(p)}
+ for(const p of ranked.sort((a,b)=>b.score-a.score)){const id=(p.player.sport||'football')+':'+p.player.id,fixture=String(p.game.fixture.id);if(seen.has(id)||(perGame.get(fixture)||0)>=maxPerGame)continue;seen.add(id);perGame.set(fixture,(perGame.get(fixture)||0)+1);eligible.push(p)}
  return {picks:eligible.slice(0,count),available:eligible.length,complete:eligible.length>=count};
 }
 

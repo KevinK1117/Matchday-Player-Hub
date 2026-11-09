@@ -1,6 +1,2 @@
-// Bookmaker odds are deliberately disabled in Matchday Player Hub.
-// Keep this endpoint as a non-functional compatibility stub for old clients.
-export default function handler(req,res){
- res.setHeader('Cache-Control','no-store');
- return res.status(410).json({error:'Buchmacherquoten wurden dauerhaft aus dieser App entfernt.'});
-}
+import {matchConsensus} from '../public/market-quality.js';
+export default async function handler(req,res){res.setHeader('Cache-Control','no-store');const id=String(req.query?.fixture||'');if(!/^\d{1,10}$/.test(id))return res.status(400).json({error:'Ungültige Begegnung'});if(!process.env.API_SPORTS_KEY)return res.status(200).json({available:false,reason:'Quotenzugang nicht eingerichtet'});try{const r=await fetch('https://v3.football.api-sports.io/odds?fixture='+id+'&bet=1',{headers:{'x-apisports-key':process.env.API_SPORTS_KEY},signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error();const d=await r.json();if(d.errors&&Object.keys(d.errors).length)throw Error();return res.status(200).json(matchConsensus(d.response,id));}catch{return res.status(200).json({available:false,reason:'Aktuelle Anbieterquoten nicht verfügbar'});}}

@@ -1,3 +1,5 @@
+import {archiveForecasts} from '../lib/prediction-ledger.js';
+import {fairProbabilities,freshTimestamp} from '../public/market-quality.js';
 import {footballTransfers} from '../lib/player-history.js';
 import {footballReference} from '../lib/lineup-reference.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
@@ -25,7 +27,7 @@ async function playerApi(path,key){
 }
 const integer=(v)=>/^\d{1,10}$/.test(String(v))&&Number(v)>0;
 export default async function handler(req,res){
- res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
+ res.setHeader('Cache-Control',['detail','lineups','liveodds','fixtures','clock'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
  if(action==='openliga')return openliga(req,res);
  if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','lineup-reference','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
@@ -105,7 +107,7 @@ export default async function handler(req,res){
   const rows=await api('/odds/live?fixture='+q.id,key);
   const first=rows.find(row=>Number(row.fixture?.id)===Number(q.id));
   const offers=[];
-  if(first&&!first.status?.blocked&&!first.status?.stopped&&!first.status?.finished){
+  if(first&&freshTimestamp(first.update,Date.now(),30000)&&!first.status?.blocked&&!first.status?.stopped&&!first.status?.finished){
    for(const bet of first.odds||[]){
     const name=String(bet.name||'');
     if(!/over.?under|total goals|goals over|goal line/i.test(name))continue;
@@ -113,11 +115,15 @@ export default async function handler(req,res){
      if(value.suspended||!/^over$/i.test(String(value.value||'')))continue;
      const line=Number(value.handicap),odd=Number(value.odd);
      if(!Number.isFinite(line)||!Number.isFinite(odd)||odd<=1)continue;
-     offers.push({market:name,line,odd,main:value.main===true});
+     const under=bet.values?.find(v=>/^under$/i.test(String(v.value||''))&&Number(v.handicap)===line&&!v.suspended);
+     const probabilities=fairProbabilities([odd,under?.odd]);
+     if(!probabilities)continue;
+     offers.push({market:name,line,odd,underOdd:Number(under.odd),probability:probabilities[0],main:value.main===true});
     }
    }
   }
   data={fixtureId:Number(q.id),updatedAt:first?.update||null,blocked:!!first?.status?.blocked,available:!!first,offers};
+  if(offers.length){const fixture=(await api('/fixtures?id='+q.id,key))[0];if(['1H','2H','HT'].includes(fixture?.fixture?.status?.short)){data.archive=await archiveForecasts(offers.slice(0,6).map(o=>({version:'live-market-v1',sport:'football',fixtureId:Number(q.id),kickoff:fixture.fixture.date,outcome:'over',line:o.line,period:/first half|1st half|half time/i.test(o.market)?'first-half':'fulltime',live:true,probability:o.probability,odds:o.odd})));}else data.offers=[];}
  }
  if(action==='detail'){
  const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isScorerCompetition(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});

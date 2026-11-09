@@ -1,3 +1,5 @@
+import {matchConsensus} from '../public/market-quality.js';
+import {archiveForecasts} from '../lib/prediction-ledger.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
@@ -82,7 +84,11 @@ async function enrichCandidates(candidates,key,date){
   const missing=problems.filter(x=>/Missing Fixture/i.test(String(x.player?.type||x.type||'')));
   const homeMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.home)).length;
   const awayMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.away)).length;
-  let score=pick.score,flags=[lineup.home&&lineup.away?'Beide Startelf-Aufstellungen veröffentlicht':'Startelf noch nicht vollständig veröffentlicht'];
+  let market;try{market=matchConsensus(await api('/odds?fixture='+pick.fixtureId+'&bet=1',key),pick.fixtureId)}catch{market={available:false,reason:'Quoten nicht verfügbar'}}
+  if(!market.available)return null;
+  if(pick.type!=='Unentschieden'&&market.probabilities[side]>=market.probabilities[side==='home'?'away':'home'])return null;
+  if(Math.abs(market.probabilities[side]-Number(pick.modelProbability)/100)>.12)return null;
+  let score=market.probabilities[side]*100,flags=[lineup.home&&lineup.away?'Beide Startelf-Aufstellungen veröffentlicht':'Startelf noch nicht vollständig veröffentlicht'];
   const internal=pick.modelProbability==null?null:Number(pick.modelProbability)/100;
   if(predictionProbability!=null&&internal!=null){
    const disagreement=Math.abs(predictionProbability-internal);
@@ -101,11 +107,11 @@ async function enrichCandidates(candidates,key,date){
    flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
   }else flags.push('Ausfalldaten nicht verfügbar');
   // Keep model-only candidates visible as provisional analyses, never as independently confirmed picks.
-  if(predictionProbability==null){flags.push('Nur internes Form-/Tormodell · ohne zusätzliche Prognosebestätigung');return {...pick,score:Math.max(0,Math.min(90,score)),dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,qualityFlags:flags,modelError,evidenceSources:['API-Sports: Tabelle/Form/H2H',...(injuriesAvailable?['API-Sports: Ausfälle']:[])]};}
+  if(predictionProbability==null){flags.push('Nur internes Form-/Tormodell · ohne zusätzliche Prognosebestätigung');return {...pick,score:Math.max(0,Math.min(90,score)),dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,market,qualityFlags:flags,modelError,evidenceSources:['API-Sports: Tabelle/Form/H2H',...(injuriesAvailable?['API-Sports: Ausfälle']:[])]};}
   if(predictionProbability!=null&&predictionProbability<.23)return null;
   const quality='Zusätzliche Prognoseprüfung';
   return {...pick,dataQuality:quality,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
-    predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,qualityFlags:flags,modelError,
+    predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,market,qualityFlags:flags,modelError,
     evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[])]};
  }));
  return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),screened:limited.length,rejected:enriched.filter(x=>x==null).length,injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
@@ -226,7 +232,7 @@ export default async function handler(req,res){
  const date=String(req.query?.date||''),allTips=req.query?.count==='all',count=allTips?100000:Number(req.query?.count||6),batched=req.query?.batch==='1',offset=Number(req.query?.offset||0),scanAt=Number(req.query?.scanAt||Date.now());
  if(!Number.isFinite(scanAt)||scanAt<0||scanAt>Date.now()+60000)return res.status(400).json({error:'Ungültiger Analysezeitpunkt'});
  if(!Number.isInteger(offset)||offset<0)return res.status(400).json({error:'Ungültiger Analysefortschritt'});
- if(!allTips&&(!Number.isInteger(count)||count<6||count>20))return res.status(400).json({error:'6–20 Auswahlen wählen'});
+ if(!allTips&&(!Number.isInteger(count)||count<1||count>20))return res.status(400).json({error:'1–20 Auswahlen wählen'});
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
@@ -285,7 +291,7 @@ export default async function handler(req,res){
   }
   diagnostics.errorReasons=[...errorGroups].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>({reason,count}));
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
-  const evidence=providerCooldownUntil>Date.now()?{candidates:preliminary.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable:false,qualityFlags:['Anbieterpause: Zusatzprüfung ausgesetzt'],evidenceSources:['API-Sports: Tabelle/Form'],modelError:'Anbieterpause'})),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
+  const evidence=providerCooldownUntil>Date.now()?{candidates:[],screened:0,rejected:preliminary.length,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
   // high-scoring provisional entries crowd out verified signals from the list.
   const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
@@ -307,6 +313,7 @@ export default async function handler(req,res){
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
   if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht zusätzlich bestätigt.';
   if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
-  return res.status(200).json({configured:true,date,nextOffset:offset+considered,scanComplete:!batched||offset+considered>=totalOrdered,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  const archive=await archiveForecasts(candidates.map(p=>({version:'market-screened-v1',sport:'football',fixtureId:p.fixtureId,kickoff:p.kickoff,outcome:p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away',probability:p.modelProbability/100,marketProbability:p.market?.probabilities[p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away'],odds:p.market?.bestOdds[p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away']})));
+  return res.status(200).json({configured:true,date,archive,nextOffset:offset+considered,scanComplete:!batched||offset+considered>=totalOrdered,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){const {status,...failure}=analysisFailure(e);if(failure.retryAfter)res.setHeader('Retry-After',String(failure.retryAfter));return res.status(status).json(failure)}
 }
