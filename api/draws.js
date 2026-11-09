@@ -1,5 +1,3 @@
-import {matchConsensus} from '../public/market-quality.js';
-import {archiveForecasts} from '../lib/prediction-ledger.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
@@ -60,166 +58,39 @@ function providerPercent(value){
  const n=Number(String(value).replace('%','').trim());
  return Number.isFinite(n)&&n>=0&&n<=100?n/100:null;
 }
-async function enrichCandidates(candidates,key,date){
- if(!candidates.length)return {candidates:[],screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0};
- // Fetch predictions only for matches that passed form and table screening.
- // The browser pages the matchday; no global candidate limit.
- let injuries=[],injuriesAvailable=false;
- try{injuries=await api('/injuries?date='+date,key);injuriesAvailable=true;}catch{}
- // Evaluate independent corroboration for signals from every represented league.
- const limited=candidates;
- const enriched=await Promise.all(limited.map(async pick=>{
-  let model=null,modelSource=null,modelError=null;
-  let lineup={home:false,away:false};
-  try{const rows=await api('/fixtures/lineups?fixture='+pick.fixtureId,key);lineup={home:rows.some(x=>Number(x.team?.id)===Number(pick.teamIds.home)&&x.startXI?.length===11),away:rows.some(x=>Number(x.team?.id)===Number(pick.teamIds.away)&&x.startXI?.length===11)};}catch{}
-  try{
-   const result=await api('/predictions?fixture='+pick.fixtureId,key);
-   const percent=result?.[0]?.predictions?.percent||{};
-   const probs={home:providerPercent(percent.home),draw:providerPercent(percent.draw),away:providerPercent(percent.away)};
-   if(Object.values(probs).every(x=>x!=null)){model=probs;modelSource='API-Sports Prognosemodell';}
-  }catch(e){modelError='Prognosemodell nicht verfügbar';}
-  const side=pick.type==='Unentschieden'?'draw':pick.team.startsWith('1 ·')?'home':'away';
-  const predictionProbability=model?.[side]??null;
-  const problems=injuries.filter(x=>Number(x.fixture?.id)===Number(pick.fixtureId));
-  const missing=problems.filter(x=>/Missing Fixture/i.test(String(x.player?.type||x.type||'')));
-  const homeMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.home)).length;
-  const awayMissing=missing.filter(x=>Number(x.team?.id)===Number(pick.teamIds?.away)).length;
-  let market;try{market=matchConsensus(await api('/odds?fixture='+pick.fixtureId+'&bet=1',key),pick.fixtureId)}catch{market={available:false,reason:'Quoten nicht verfügbar'}}
-  if(!market.available)return null;
-  if(pick.type!=='Unentschieden'&&market.probabilities[side]>=market.probabilities[side==='home'?'away':'home'])return null;
-  if(Math.abs(market.probabilities[side]-Number(pick.modelProbability)/100)>.12)return null;
-  let score=market.probabilities[side]*100,flags=[lineup.home&&lineup.away?'Beide Startelf-Aufstellungen veröffentlicht':'Startelf noch nicht vollständig veröffentlicht'];
-  const internal=pick.modelProbability==null?null:Number(pick.modelProbability)/100;
-  if(predictionProbability!=null&&internal!=null){
-   const disagreement=Math.abs(predictionProbability-internal);
-   if(disagreement>.20)return null;
-   if(disagreement>.12){score-=8;flags.push('Abweichende Prognosemodelle – Unsicherheit erhöht');}
-  }
-  if(predictionProbability!=null){
-   if(predictionProbability<.13)return null;
-   if(predictionProbability<.20)score-=10;
-   else if(predictionProbability>=.34)score+=5;
-   flags.push('Zweite Prognose '+Math.round(predictionProbability*100)+' % (Anbieter, nicht kalibriert)');
-  }else flags.push('Zweite Prognose nicht verfügbar');
-  if(injuriesAvailable){
-   if(side==='home'&&homeMissing>=5||side==='away'&&awayMissing>=5)return null;
-   if(side==='home'&&homeMissing>=3||side==='away'&&awayMissing>=3)score-=6;
-   flags.push('Gemeldete Ausfälle Heim/Gast: '+homeMissing+'/'+awayMissing);
-  }else flags.push('Ausfalldaten nicht verfügbar');
-  // Keep model-only candidates visible as provisional analyses, never as independently confirmed picks.
-  if(predictionProbability==null){flags.push('Nur internes Form-/Tormodell · ohne zusätzliche Prognosebestätigung');return {...pick,score:Math.max(0,Math.min(90,score)),dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,market,qualityFlags:flags,modelError,evidenceSources:['API-Sports: Tabelle/Form/H2H',...(injuriesAvailable?['API-Sports: Ausfälle']:[])]};}
-  if(predictionProbability!=null&&predictionProbability<.23)return null;
-  const quality='Zusätzliche Prognoseprüfung';
-  return {...pick,dataQuality:quality,score:Math.max(0,Math.min(90,score)),providerPrediction:predictionProbability==null?null:Math.round(predictionProbability*1000)/10,
-    predictionsSource:modelSource,injuriesAvailable,injuries:{homeMissing,awayMissing},lineup,market,qualityFlags:flags,modelError,
-    evidenceSources:['API-Sports: Tabelle/Form/H2H',...(modelSource?[modelSource]:[]),...(injuriesAvailable?['API-Sports: Verletzungen/Sperren']:[])]};
- }));
- return {candidates:enriched.filter(Boolean).sort((a,b)=>b.score-a.score),screened:limited.length,rejected:enriched.filter(x=>x==null).length,injuriesAvailable,predictionsAvailable:enriched.filter(x=>x?.predictionsSource).length};
-}
+async function enrichCandidates(candidates){return {candidates:candidates.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,injuriesAvailable:false,qualityFlags:['Nur jüngste Form aus 5–10 Spielen; keine Quoten-, Tabellen- oder Ausfallgewichtung']})),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0};}
+
 const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
 export function form(rows,id,date){
  const games=rows.filter(g=>completed(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
  const details=games.map(g=>{const home=Number(g.teams.home.id)===Number(id),scored=Number(home?g.goals.home:g.goals.away),conceded=Number(home?g.goals.away:g.goals.home);return {home,scored,conceded,points:scored>conceded?3:scored===conceded?1:0,draw:scored===conceded}});
  const avg=(arr,key)=>arr.length?arr.reduce((n,x)=>n+x[key],0)/arr.length:null;
  const home=details.filter(x=>x.home),away=details.filter(x=>!x.home);
- return {last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored'),homeConceded:avg(home,'conceded'),awayConceded:avg(away,'conceded'),last5Scored:avg(details.slice(0,5),'scored'),last5Conceded:avg(details.slice(0,5),'conceded')};
+ return {scoringGames:details.filter(x=>x.scored>0).length,scoringRate:avg(details.map(x=>({hit:x.scored>0})), 'hit'),winRate:avg(details.map(x=>({hit:x.points===3})), 'hit'),last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored'),homeConceded:avg(home,'conceded'),awayConceded:avg(away,'conceded'),last5Scored:avg(details.slice(0,5),'scored'),last5Conceded:avg(details.slice(0,5),'conceded')};
 }
 function ranks(standings,id){
  const groups=standings?.[0]?.league?.standings||[];
  const row=groups.flat().find(x=>Number(x.team?.id)===Number(id));
  return row?{rank:row.rank,points:row.points,played:row.all?.played,goalDiff:row.goalsDiff}:null;
 }
-async function evaluate(g,key,date,independent,additional){
- const h=g.teams.home,a=g.teams.away,isCup=g.league?.type==='Cup';
- const historyPath=id=>'/fixtures?team='+id+(isCup?'&last=20':'&league='+g.league.id+'&season='+g.league.season+'&last=20');
- // Two required team histories; standings and H2H are optional, never a reason
- // to discard an otherwise analyzable fixture when the provider rate-limits.
- const [home,away]=await Promise.allSettled([api(historyPath(h.id),key),api(historyPath(a.id),key)]);
- if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:String(home.status==='rejected'?home.reason?.message:away.reason?.message||'unknown').slice(0,160)};
- const allowable=rows=>rows.filter(x=>(isCup||Number(x.league?.id)===Number(g.league.id)));
- const hf=form(allowable(home.value),h.id,date),af=form(allowable(away.value),a.id,date);
- // Only ask for optional standings when both sides have enough history.
- if(hf.played<6||af.played<6||hf.homePlayed<2||af.awayPlayed<2)return {status:'insufficientData',picks:[]};
- const standings=await api('/standings?league='+g.league.id+'&season='+g.league.season,key).catch(()=>[]);
- const hr=ranks(standings,h.id),ar=ranks(standings,a.id);
- const direct=[];
- const draws=direct.filter(x=>x.goals.home===x.goals.away).length;
- 
- const homeRate=hf.homePoints/3,awayRate=af.awayPoints/3;
- // Empirical pre-match Poisson estimate. Venue splits, season form and recent games
- // are shrunk toward neutral scoring rates to guard against small samples.
- const shrunk=(venue,overall,venueCount,recent)=>{
-   const base=Number.isFinite(overall)?overall:1.3;
-   const local=venueCount>=3&&Number.isFinite(venue)?venue:base;
-   const measured=.58*local+.28*base+.14*(Number.isFinite(recent)?recent:base);
-   const reliability=Math.min(1,(hf.played+af.played)/28);
-   return measured*reliability+1.3*(1-reliability);
- };
- const hAttack=shrunk(hf.homeScored,hf.scored,hf.homePlayed,hf.last5Scored);
- const aDefence=shrunk(af.awayConceded,af.conceded,af.awayPlayed,af.last5Conceded);
- const aAttack=shrunk(af.awayScored,af.scored,af.awayPlayed,af.last5Scored);
- const hDefence=shrunk(hf.homeConceded,hf.conceded,hf.homePlayed,hf.last5Conceded);
- const bound=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
- let lambdaHome=bound((hAttack*.52+aDefence*.48)*1.06,.25,3.6);
- let lambdaAway=bound((aAttack*.52+hDefence*.48)*.95,.25,3.6);
- // When a separately authorized, reliably mapped second source is configured,
- // require reasonable agreement rather than blindly increasing a prediction score.
- const externalHome=externalTeamForm(additional,h.name,g.league.id,date,g.league.name,g.league.country),externalAway=externalTeamForm(additional,a.name,g.league.id,date,g.league.name,g.league.country);
- if(externalHome&&externalAway){lambdaHome=bound(lambdaHome*.85+(externalHome.scored+externalAway.conceded)/2*.15,.25,3.6);lambdaAway=bound(lambdaAway*.85+(externalAway.scored+externalHome.conceded)/2*.15,.25,3.6);}
- const independentFixture=independent?.fixtures?.get(String(g.fixture.id))||null;
- if(independentFixture){
-   if(Math.abs(lambdaHome-independentFixture.expectedHomeGoals)>1.25||
-      Math.abs(lambdaAway-independentFixture.expectedAwayGoals)>1.25)
-     return {status:'sourceConflict',picks:[]};
-   lambdaHome=bound(lambdaHome*.75+independentFixture.expectedHomeGoals*.25,.25,3.6);
-   lambdaAway=bound(lambdaAway*.75+independentFixture.expectedAwayGoals*.25,.25,3.6);
- }
- const poisson=(n,lambda)=>{let p=Math.exp(-lambda);for(let k=1;k<=n;k++)p*=lambda/k;return p};
- let probHome=0,probDraw=0,probAway=0,weight=0;
- for(let x=0;x<=9;x++)for(let y=0;y<=9;y++){
-  const p=poisson(x,lambdaHome)*poisson(y,lambdaAway);
-  weight+=p;if(x>y)probHome+=p;else if(x===y)probDraw+=p;else probAway+=p;
- }
- if(!(weight>.98))return {status:'insufficientData',picks:[]};
- probHome/=weight;probDraw/=weight;probAway/=weight;
- const winProbs={home:probHome,draw:probDraw,away:probAway};
- const h2hDraws=0;
- const drawRate=(hf.drawRate+af.drawRate)/2;
- const formDifference=Math.abs(homeRate-awayRate);
- const rankDifference=hr&&ar?Math.abs(Number(hr.rank)-Number(ar.rank)):null;
- const picks=[];
- // Draw: coherent goal expectations, balanced form and nontrivial model probability.
- if(probDraw>=.22&&formDifference<=.30&&Math.abs(lambdaHome-lambdaAway)<.65){
-  const raw=Math.min(82,probDraw*100+10*(1-formDifference));
-  picks.push({type:'Unentschieden',team:'X',score:Math.round(raw),modelProbability:Math.round(probDraw*1000)/10,
-   reason:'Erwartete Tore '+lambdaHome.toFixed(2)+'/'+lambdaAway.toFixed(2)+' · Remisanteil Form '+Math.round(drawRate*100)+' % · '+(hr&&ar?'Tabellenplätze '+hr.rank+'/'+ar.rank:'Keine vergleichbare Ligatabelle')+' · H2H '+h2hDraws+'/'+direct.length});
- }
- const homeUnderdog=probHome<probAway&&probHome<.45;
- const awayUnderdog=probAway<probHome&&probAway<.45;
- // Statistical outsiders use the goal model, not table position; no market-odds claim.
- // Home/away momentum must support an upset; no purely high-price bets.
- if((homeUnderdog)&&hf.homePlayed>=3&&af.awayPlayed>=3&&hf.homePoints>=1&&probHome>=.21){
-  const momentum=hf.homePoints-af.awayPoints;
-  if(momentum>=0){
-   const rating=Math.min(84,probHome*100+Math.min(10,momentum*5));
-   picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,score:Math.round(rating),modelProbability:Math.round(probHome*1000)/10,
-    reason:'Tormodell Heimsieg '+Math.round(probHome*100)+' % (unkalibriert) · Heimform '+hf.homePoints.toFixed(2)+' gegen Auswärtsform '+af.awayPoints.toFixed(2)+' Pkt/Spiel · '+(hr&&ar?'Tabelle '+hr.rank+'/'+ar.rank:'Ohne verfügbare Ligatabelle')});
-  }
- }
- if((awayUnderdog)&&af.awayPlayed>=3&&hf.homePlayed>=3&&af.awayPoints>=1&&probAway>=.21){
-  const momentum=af.awayPoints-hf.homePoints;
-  if(momentum>=0){
-   const rating=Math.min(84,probAway*100+Math.min(10,momentum*5));
-   picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,score:Math.round(rating),modelProbability:Math.round(probAway*1000)/10,
-    reason:'Tormodell Auswärtssieg '+Math.round(probAway*100)+' % (unkalibriert) · Auswärtsform '+af.awayPoints.toFixed(2)+' gegen Heimform '+hf.homePoints.toFixed(2)+' Pkt/Spiel · '+(hr&&ar?'Tabelle '+hr.rank+'/'+ar.rank:'Ohne verfügbare Ligatabelle')});
-  }
- }
- return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>{
-  // Poisson estimate is uncalibrated; H2H remains descriptive rather than an additive probability.
-  // An analysis index of 100 could be mistaken for certainty; avoid that visual implication.
-  return {...p,score:Math.max(0,Math.min(88,p.score)),externalForm:externalHome&&externalAway?{sources:[...new Set([...externalHome.sources,...externalAway.sources])],homeMatches:externalHome.played,awayMatches:externalAway.played,weight:.15}:null,independentEvidence:!!independentFixture,teamIds:{home:h.id,away:a.id},fixtureId:g.fixture.id,match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:hr,away:ar},goalModel:{home:lambdaHome,away:lambdaAway,probabilities:winProbs},h2h:{played:direct.length,draws}};
- }).sort((x,y)=>y.score-x.score)};
+async function evaluate(g,key,date){
+ const h=g.teams.home,a=g.teams.away;
+ const history=id=>api('/fixtures?team='+id+'&last=16',key);
+ const [home,away]=await Promise.allSettled([history(h.id),history(a.id)]);
+ if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:'Formdaten nicht verfügbar'};
+ const hf=form(home.value,h.id,date),af=form(away.value,a.id,date);
+ if(hf.played<5||af.played<5)return {status:'insufficientData',picks:[]};
+ const homeRate=(hf.scored+af.conceded)/2,awayRate=(af.scored+hf.conceded)/2;
+ const poisson=(n,rate)=>{let v=Math.exp(-rate);for(let i=1;i<=n;i++)v*=rate/i;return v};
+ let ph=0,pd=0,pa=0,weight=0;for(let x=0;x<=20;x++)for(let y=0;y<=20;y++){const p=poisson(x,homeRate)*poisson(y,awayRate);weight+=p;if(x>y)ph+=p;else if(x===y)pd+=p;else pa+=p;}
+ if(weight<.98)return {status:'insufficientData',picks:[]};ph/=weight;pd/=weight;pa/=weight;
+ const picks=[],balanced=Math.abs(hf.points/hf.played-af.points/af.played)<=.8;
+ if(pd>=.22&&balanced&&(hf.drawRate+af.drawRate)/2>=.2)picks.push({type:'Unentschieden',team:'X',modelProbability:Math.round(pd*1000)/10,score:pd*100});
+ if(ph<pa&&ph>=.2&&hf.scoringRate>=.6&&hf.winRate>=.2)picks.push({type:'Außenseiter-Sieg',team:'1 · '+h.name,modelProbability:Math.round(ph*1000)/10,score:ph*100});
+ if(pa<ph&&pa>=.2&&af.scoringRate>=.6&&af.winRate>=.2)picks.push({type:'Außenseiter-Sieg',team:'2 · '+a.name,modelProbability:Math.round(pa*1000)/10,score:pa*100});
+ return {status:picks.length?'candidate':'noSignal',picks:picks.map(p=>({...p,reason:'Nur jüngste Form: '+hf.played+'/'+af.played+' Spiele · traf in '+hf.scoringGames+'/'+hf.played+' bzw. '+af.scoringGames+'/'+af.played+' Spielen. Poisson-Schätzung aus Toren/Gegentoren der jüngsten Spiele; keine kommende Trefferhäufigkeit und nicht kalibriert.',fixtureId:g.fixture.id,teamIds:{home:h.id,away:a.id},match:h.name+' – '+a.name,league:g.league.name,kickoff:g.fixture.date,homeForm:hf,awayForm:af,table:{home:null,away:null},goalModel:{home:homeRate,away:awayRate,probabilities:{home:ph,draw:pd,away:pa}},h2h:{played:0,draws:0},formOnly:true}))};
 }
+
 export function analysisFailure(error){
  const message=String(error?.message||error);
  if(/API_PAUSED|HTTP 429|rate.limit|too many|quota|requests.limit/i.test(message))return {status:503,error:'Anbieter-Anfragelimit erreicht. Die Analyse wird nach einer Pause erneut versucht.',code:'PROVIDER_LIMIT',retryAfter:90};
@@ -232,12 +103,12 @@ export default async function handler(req,res){
  const date=String(req.query?.date||''),allTips=req.query?.count==='all',count=allTips?100000:Number(req.query?.count||6),batched=req.query?.batch==='1',offset=Number(req.query?.offset||0),scanAt=Number(req.query?.scanAt||Date.now());
  if(!Number.isFinite(scanAt)||scanAt<0||scanAt>Date.now()+60000)return res.status(400).json({error:'Ungültiger Analysezeitpunkt'});
  if(!Number.isInteger(offset)||offset<0)return res.status(400).json({error:'Ungültiger Analysefortschritt'});
- if(!allTips&&(!Number.isInteger(count)||count<1||count>20))return res.status(400).json({error:'1–20 Auswahlen wählen'});
+ if(!allTips&&(!Number.isInteger(count)||count<6||count>20))return res.status(400).json({error:'6–20 Auswahlen wählen'});
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:'Ungültiges Datum'});
  const key=process.env.API_SPORTS_KEY;
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
-  const [independent,additional]=await Promise.all([getFlashscoreEvidence(date,'football'),getFootballEvidence(date)]);
+  const independent={configured:false,available:false,fixtures:new Map()},additional={providers:[]};
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>Date.parse(g.fixture?.date)>scanAt);
   // Every upcoming football fixture returned for this matchday enters the scan.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
@@ -291,7 +162,7 @@ export default async function handler(req,res){
   }
   diagnostics.errorReasons=[...errorGroups].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>({reason,count}));
   const preliminary=settledResults.filter(r=>r.status==='fulfilled').flatMap(r=>r.value?.picks||[]).sort((a,b)=>b.score-a.score);
-  const evidence=providerCooldownUntil>Date.now()?{candidates:[],screened:0,rejected:preliminary.length,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
+  const evidence=providerCooldownUntil>Date.now()?{candidates:preliminary.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,predictionsSource:null,injuriesAvailable:false,qualityFlags:['Anbieterpause: Zusatzprüfung ausgesetzt'],evidenceSources:['API-Sports: Tabelle/Form'],modelError:'Anbieterpause'})),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0}:await enrichCandidates(preliminary,key,date);
   // Prefer additionally checked signals over model-only entries. Never let
   // high-scoring provisional entries crowd out verified signals from the list.
   const verifiedCandidates=[],provisionalCandidates=[],seenFixtures=new Set();
@@ -313,7 +184,6 @@ export default async function handler(req,res){
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
   if(!verifiedCandidates.length&&provisionalCandidates.length)notice+=' Vorläufige Modellkandidaten sind nicht zusätzlich bestätigt.';
   if(!preliminary.length&&considered>0)notice+=' Kein Spiel erfüllt bisher die Mindestkriterien des Form-/Tormodells.';
-  const archive=await archiveForecasts(candidates.map(p=>({version:'market-screened-v1',sport:'football',fixtureId:p.fixtureId,kickoff:p.kickoff,outcome:p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away',probability:p.modelProbability/100,marketProbability:p.market?.probabilities[p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away'],odds:p.market?.bestOdds[p.type==='Unentschieden'?'draw':p.team.startsWith('1 ·')?'home':'away']})));
-  return res.status(200).json({configured:true,date,archive,nextOffset:offset+considered,scanComplete:!batched||offset+considered>=totalOrdered,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
+  return res.status(200).json({configured:true,date,nextOffset:offset+considered,scanComplete:!batched||offset+considered>=totalOrdered,additionalProviders:additional.providers,picks:complete?verifiedCandidates:[],candidates,verifiedCandidates,provisionalCandidates,available:verifiedCandidates.length,complete,count,diagnostics,extraEvidence:{predictionMatches:evidence.predictionsAvailable,injuriesAvailable:evidence.injuriesAvailable},flashscoreEvidence:{configured:independent.configured,available:independent.available,matchedFixtures:settledResults.filter(r=>r.status==='fulfilled'&&r.value?.picks?.some(p=>p.independentEvidence)).length,issue:independent.issue||null},sources:['API-Sports: Spielplan, Form, Tabelle und H2H',...(evidence.predictionsAvailable?['API-Sports: Prognosen']:[]),...(evidence.injuriesAvailable?['API-Sports: Ausfälle']:[]),...(independent.available?['Autorisierter Flashscore-Datenfeed']:[])],leagueCoverage,coverageComplete:leagueCoverage.every(x=>x.status==='covered'),considered,totalFixtures:fixtures.length,updatedAt:new Date().toISOString(),notice});
  }catch(e){const {status,...failure}=analysisFailure(e);if(failure.retryAfter)res.setHeader('Retry-After',String(failure.retryAfter));return res.status(status).json(failure)}
 }

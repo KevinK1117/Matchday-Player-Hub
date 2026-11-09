@@ -32,26 +32,27 @@ export default async function handler(req,res){
  const teams=new Map();
  for(const p of players){
   const k=p.team+':'+p.league+':'+p.season;
-  if(!teams.has(k)&&teams.size<4)teams.set(k,{...p,players:[]});
+  if(!teams.has(k)&&teams.size<1)teams.set(k,{...p,players:[]});
   if(teams.has(k))teams.get(k).players.push(p);
  }
  const values=[...teams.values()],results=[];
  // Four teams × (one fixture list + up to three player box scores) maximum.
  for(const t of values){
   try{
-   const games=(await api('/fixtures?team='+t.team+'&league='+t.league+'&season='+t.season+'&last=8',key))
+   const games=(await api('/fixtures?team='+t.team+'&last=16',key))
     .filter(g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&String(g.fixture?.date||'').slice(0,10)<date)
-    .sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,3);
-   const stats=await Promise.allSettled(games.map(g=>api('/fixtures/players?fixture='+g.fixture.id+'&team='+t.team,key)));
-   const byPlayer=new Map(t.players.map(p=>[p.id,{playerId:p.id,teamId:p.team,fixtureCount:0,minutes:0,goals:0,shotsOnTarget:0,shotDataCount:0}]));
-   for(const item of stats){
+    .sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
+   const stats=new Array(games.length);let next=0;await Promise.all(Array.from({length:2},async()=>{while(next<games.length){const i=next++;try{stats[i]={status:'fulfilled',value:await api('/fixtures/players?fixture='+games[i].fixture.id+'&team='+t.team,key)}}catch{stats[i]={status:'rejected'}}}}));
+   const byPlayer=new Map(t.players.map(p=>[p.id,{playerId:p.id,teamId:p.team,fixtureCount:0,minutes:0,goals:0,shotsOnTarget:0,shotDataCount:0,recentAppearances:[],complete:stats.every(x=>x.status==='fulfilled')}]));
+   for(const [index,item] of stats.entries()){
     if(item.status!=='fulfilled')continue;
     const rows=item.value||[];
     for(const side of rows)for(const entry of side.players||[]){
      const r=byPlayer.get(Number(entry.player?.id));if(!r)continue;
      const st=entry.statistics?.[0]||{},minutes=Number(st.games?.minutes)||0;
      if(minutes<=0)continue;
-     r.fixtureCount++;r.minutes+=minutes;
+     if(st.goals?.total==null){r.complete=false;continue;}
+     r.recentAppearances.push({fixtureId:games[index].fixture.id,date:games[index].fixture.date,goals:Number(st.goals.total),minutes});r.fixtureCount++;r.minutes+=minutes;
      r.goals+=Number(st.goals?.total)||0;
      if(st.shots?.on!=null){r.shotsOnTarget+=Number(st.shots.on)||0;r.shotDataCount++}
     }
@@ -59,5 +60,5 @@ export default async function handler(req,res){
    results.push(...byPlayer.values().filter(x=>x.fixtureCount>=2));
   }catch{}
  }
- return res.status(200).json({configured:true,players:results,coveredTeams:values.length,source:'API-Sports: Einzelstatistiken abgeschlossener Spiele',updatedAt:new Date().toISOString(),notice:'Bis zu drei vergangene Spiele pro ausgewähltem Team. Begrenzte Abdeckung; keine Ausfall- oder Trefferprognose.'});
+ return res.status(200).json({configured:true,players:results,coveredTeams:values.length,source:'API-Sports: Einzelstatistiken abgeschlossener Spiele',updatedAt:new Date().toISOString(),notice:'Bis zu zehn vergangene Teamspiele je Abruf. Nur belegte Einsätze; bei fehlenden Einzelstatistiken keine Formauswahl.'});
 }

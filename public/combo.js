@@ -1,3 +1,4 @@
+import {scorerRecentForm} from './recent-form.js';
 import {threeFactorScorer,footballThreeFactorScorer} from './scorer-model.js';
 // Keep a strict, evidence-based scorer ranking; missing data never creates invented picks.
 function eligibleScorer(p,confirmedOnly=false){
@@ -24,16 +25,15 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
  const ranked=[];
  for(const p of players){
   const game=fixtures.get(String(p.fixtureId)),nhl=p.sport==='nhl';
-  if(options.strict&&!(nhl?p.participation==='Bestätigter Einsatz':p.participation==='Startelf bestätigt'))continue;
-  if(!game||!eligibleScorer(p,confirmedOnly))continue;
-  const analysis=options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;
-  if(options.model==='three-factor'&&!analysis)continue;
-  const score=analysis?analysis.expectedGoals:Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
+  const formOnly=options.model==='recent-form';
+  if(!game||!p||p.id==null||!p.name||p.unavailable||(p.exclusionReason&&(!formOnly||!/Kein (Außenstürmer|Stürmer)|Zu geringe|H2H/.test(p.exclusionReason)))||(!formOnly&&!eligibleScorer(p,confirmedOnly)))continue;
+  const analysis=formOnly?scorerRecentForm(p,now):options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;
+  if((formOnly||options.model==='three-factor')&&!analysis)continue;
+  const score=formOnly?analysis.hitRate+Math.min(9,analysis.goalsPerGame)/100:analysis?analysis.expectedGoals:Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
   ranked.push({player:analysis?{...p,comboAnalysis:analysis}:p,game,score});
  }
- const maxPerGame=options.strict?1:4;
  const seen=new Set(),perGame=new Map(),eligible=[];
- for(const p of ranked.sort((a,b)=>b.score-a.score)){const id=(p.player.sport||'football')+':'+p.player.id,fixture=String(p.game.fixture.id);if(seen.has(id)||(perGame.get(fixture)||0)>=maxPerGame)continue;seen.add(id);perGame.set(fixture,(perGame.get(fixture)||0)+1);eligible.push(p)}
+ for(const p of ranked.sort((a,b)=>b.score-a.score)){const id=(p.player.sport||'football')+':'+p.player.id,fixture=String(p.game.fixture.id);if(seen.has(id)||(perGame.get(fixture)||0)>=(options.model==='recent-form'?3:4))continue;seen.add(id);perGame.set(fixture,(perGame.get(fixture)||0)+1);eligible.push(p)}
  return {picks:eligible.slice(0,count),available:eligible.length,complete:eligible.length>=count};
 }
 

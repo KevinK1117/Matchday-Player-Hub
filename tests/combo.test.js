@@ -2,8 +2,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import {ran
 const now=Date.now(),games=Array.from({length:10},(_,i)=>({fixture:{id:i+1,date:new Date(now+3600000).toISOString(),status:{short:'NS'}}}));
 const base={name:'Player',sport:'football',lineupSource:'last',lineupPosition:'F',appearances:15,minutes:1000,minutesPerGame:75,goals:8,shotsPerGame:2,participation:'Startelf nicht veröffentlicht'};
 const players=games.map((g,i)=>({...base,id:i+1,fixtureId:g.fixture.id}));
-test('statistical combos accept 1–20 choices, disclose a short selection and never invent prices',()=>{
- for(const n of [1,2,3,6,8,10,20]){const r=rankScorers(games,players,n,now);assert.equal(r.picks.length,Math.min(n,10));assert.equal(r.complete,n<=10);assert.equal(r.available,10);assert.equal(r.total,undefined)}
+test('statistical combos accept 6–20 choices, disclose a short selection and never invent prices',()=>{
+ for(const n of [6,8,10,20]){const r=rankScorers(games,players,n,now);assert.equal(r.picks.length,Math.min(n,10));assert.equal(r.complete,n<=10);assert.equal(r.available,10);assert.equal(r.total,undefined)}
  for(const n of [0,21,NaN])assert.throws(()=>rankScorers(games,players,n,now));
 });
 test('exclude missing evidence, midfielders, bench, insufficient minutes and started matches',()=>{
