@@ -27,6 +27,8 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
   const game=fixtures.get(String(p.fixtureId)),nhl=p.sport==='nhl';
   const formOnly=options.model==='recent-form';
   if(!game||!p||p.id==null||!p.name||p.unavailable||(p.exclusionReason&&(!formOnly||!/Kein (Außenstürmer|Stürmer)|Zu geringe|H2H/.test(p.exclusionReason)))||(!formOnly&&!eligibleScorer(p,confirmedOnly)))continue;
+  const role=String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase();
+  if(formOnly&&!(nhl?['L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(role))continue;
   const analysis=formOnly?scorerRecentForm(p,now):options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;
   if((formOnly||options.model==='three-factor')&&!analysis)continue;
   const score=formOnly?analysis.hitRate+Math.min(9,analysis.goalsPerGame)/100:analysis?analysis.expectedGoals:Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
