@@ -12,7 +12,7 @@ test('draw configurator rejects selections outside 6–20',async()=>{
 });
 test('partial analysis exposes real candidates without claiming a complete combo',async()=>{
  const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';
- const fixture={fixture:{id:990001,date:'2099-10-22T18:00:00Z',status:{short:'NS'}},league:{id:78,name:'Bundesliga',country:'Germany',season:2026},teams:{home:{id:1,name:'Home'},away:{id:2,name:'Away'}}};
+ const fixture={fixture:{id:990001,date:'2099-10-22T18:00:00Z',status:{short:'NS'}},league:{id:78,name:'Bundesliga',country:'Germany',type:'League',season:2026},teams:{home:{id:1,name:'Home'},away:{id:2,name:'Away'}}};
  globalThis.fetch=async input=>{const url=new URL(input);let rows=[];
  if(url.pathname==='/standings')rows=[{league:{standings:[[{team:{id:1},rank:3,points:15,all:{played:5}},{team:{id:2},rank:4,points:14,all:{played:5}}]]}}];
  else if(url.pathname.includes('headtohead'))rows=[];
@@ -25,20 +25,23 @@ test('partial analysis exposes real candidates without claiming a complete combo
 });
 test('analysis bounds provider concurrency and does not fetch standings for form-only selection',async()=>{
  const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';let active=0,maxActive=0,standingsRequests=0;
- const games=Array.from({length:4},(_,i)=>({fixture:{id:991000+i,date:'2099-10-23T18:00:00Z',status:{short:'NS'}},league:{id:39,name:'Premier League',country:'England',season:2027},teams:{home:{id:1000+i*2,name:'Home'},away:{id:1001+i*2,name:'Away'}}}));
+ const games=Array.from({length:4},(_,i)=>({fixture:{id:991000+i,date:'2099-10-23T18:00:00Z',status:{short:'NS'}},league:{id:39,name:'Premier League',country:'England',type:'League',season:2027},teams:{home:{id:1000+i*2,name:'Home'},away:{id:1001+i*2,name:'Away'}}}));
  globalThis.fetch=async input=>{active++;maxActive=Math.max(maxActive,active);const u=new URL(input);if(u.pathname==='/standings')standingsRequests++;await new Promise(r=>setTimeout(r,2));active--;return {ok:true,json:async()=>({response:u.pathname==='/fixtures'&&u.searchParams.has('date')?games:u.pathname==='/fixtures'&&u.searchParams.has('team')?Array.from({length:8},(_,i)=>({fixture:{id:Number(u.searchParams.get('team'))*100+i,date:'2026-10-'+String(10+i).padStart(2,'0'),status:{short:'FT'}},league:games[0].league,teams:i%2?{home:{id:Number(u.searchParams.get('team'))},away:{id:999}}:{home:{id:999},away:{id:Number(u.searchParams.get('team'))}},goals:{home:1,away:1}})):[]})}};
  const res={setHeader(){},status(){return this},json(){}};
  try{await handler({query:{date:'2099-10-23',count:'6'}},res);assert(maxActive<=3);assert.equal(standingsRequests,0)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });
 
 
-test('batched whole-matchday scan retains more than twenty signals from every supplied league',async()=>{
+test('batched whole-matchday scan retains more than twenty signals from eligible leagues and never fetches youth or lower-tier histories',async()=>{
  const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';
- const league={id:9999,name:'Other League',country:'Other',season:2099};
+ const league={id:39,name:'Premier League',country:'England',type:'League',season:2099};
  const games=Array.from({length:26},(_,i)=>({fixture:{id:800000+i,date:'2099-11-07T20:00:00Z',status:{short:'NS'}},league,teams:{home:{id:700000+i*2,name:'Home '+i},away:{id:700001+i*2,name:'Away '+i}}}));
+ const youth={...games[0],fixture:{...games[0].fixture,id:900001},teams:{home:{id:999991,name:'Home U21'},away:{id:999992,name:'Away U17'}}};
+ const lower={...youth,fixture:{...youth.fixture,id:900002},league:{...league,name:'Championship'},teams:{home:{id:999993,name:'Home'},away:{id:999994,name:'Away'}}};
+ const requested=new Set();
  globalThis.fetch=async input=>{const u=new URL(input);let response=[];
- if(u.pathname==='/fixtures'&&u.searchParams.has('date'))response=games;
- else if(u.pathname==='/fixtures'&&u.searchParams.has('team')){const id=Number(u.searchParams.get('team'));response=Array.from({length:10},(_,i)=>({fixture:{id:id*100+i,date:'2099-10-'+String(10+i).padStart(2,'0'),status:{short:'FT'}},league,teams:i%2?{home:{id},away:{id:999}}:{home:{id:999},away:{id}},goals:{home:1,away:1}}))}
+ if(u.pathname==='/fixtures'&&u.searchParams.has('date'))response=[...games,youth,lower];
+ else if(u.pathname==='/fixtures'&&u.searchParams.has('team')){const id=Number(u.searchParams.get('team'));requested.add(id);response=Array.from({length:10},(_,i)=>({fixture:{id:id*100+i,date:'2099-10-'+String(10+i).padStart(2,'0'),status:{short:'FT'}},league,teams:i%2?{home:{id},away:{id:999}}:{home:{id:999},away:{id}},goals:{home:1,away:1}}))}
  return {ok:true,json:async()=>({response})};};
- try{let offset=0,finished=false,batches=0;const seen=new Set();while(!finished){let body;await handler({query:{date:'2099-11-07',count:'all',batch:'1',offset:String(offset)}},{setHeader(){},status(){return this},json(d){body=d}});assert.equal(body.totalFixtures,26);batches++;assert(body.considered<=8);assert(body.nextOffset>offset);for(const p of body.candidates){seen.add(p.fixtureId);assert.equal(p.injuriesAvailable,false);assert.equal(p.lineup,undefined);assert(p.homeForm.homeScored>0);assert(p.awayForm.awayPoints>0)}offset=body.nextOffset;finished=body.scanComplete}assert.equal(offset,26);assert.equal(seen.size,26);assert.equal(batches,4)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
+ try{let offset=0,finished=false,batches=0;const seen=new Set();while(!finished){let body;await handler({query:{date:'2099-11-07',count:'all',batch:'1',offset:String(offset)}},{setHeader(){},status(){return this},json(d){body=d}});assert.equal(body.totalFixtures,26);batches++;assert(body.considered<=8);assert(body.nextOffset>offset);for(const p of body.candidates){seen.add(p.fixtureId);assert.equal(p.injuriesAvailable,false);assert.equal(p.lineup,undefined);assert(p.homeForm.homeScored>0);assert(p.awayForm.awayPoints>0)}offset=body.nextOffset;finished=body.scanComplete}assert.equal(offset,26);assert.equal(seen.size,26);assert.equal(batches,4);assert.equal(requested.size,52);assert([...requested].every(id=>id<999991))}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });

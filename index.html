@@ -736,7 +736,7 @@ async function liveCombo(force=false){
   }).sort((a,b)=>b.strength-a.strength||Number(b.valid)-Number(a.valid));
   const candidates=ranked.filter(x=>x.tip).slice(0,Math.min(Math.max(count*2,10),24));
   const selected=await Promise.all(candidates.map(async x=>{
-   try{const detail=await get({action:'detail',id:x.g.fixture.id},kind),d=detail.data,cutoff=Date.parse(x.g.fixture.date),form=liveRecentForm(teamRecentForm(d?.homeRecent?.data,x.g.teams.home.id,cutoff),teamRecentForm(d?.awayRecent?.data,x.g.teams.away.id,cutoff));return {...x,form,analysis:null,liveOdd:null};}catch{return {...x,form:null,analysis:null,liveOdd:null}}
+   try{const detail=await get({action:'detail',id:x.g.fixture.id,formOnly:1},kind),d=detail.data,cutoff=Date.parse(x.g.fixture.date),form=liveRecentForm(teamRecentForm(d?.homeRecent?.data,x.g.teams.home.id,cutoff),teamRecentForm(d?.awayRecent?.data,x.g.teams.away.id,cutoff));return {...x,form,analysis:null,liveOdd:null};}catch{return {...x,form:null,analysis:null,liveOdd:null}}
   }));
   for(let i=selected.length-1;i>=0;i--)if(!selected[i].form)selected.splice(i,1);
   selected.forEach(x=>{
@@ -754,9 +754,23 @@ async function liveCombo(force=false){
 }
 async function loadRecentScorers(players,sp,token){
  const status=$('comboResult'),date=$('date').value;
- if(sp==='nhl'){const pending=players.filter(p=>!p.last10?.length&&!p.unavailable);let next=0;await Promise.all(Array.from({length:2},async()=>{while(next<pending.length&&token===comboToken){const p=pending[next++];status.textContent='Aktuelle NHL-Torform wird geprüft · '+next+'/'+pending.length;try{const d=await get({action:'player',id:p.id},'nhl');p.last10=d.data?.last10Games||[];}catch{p.recentFormComplete=false}}}));return;}
+ if(sp==='nhl'){
+  const month=Number(date.slice(5,7));
+  const season=Number(date.slice(0,4))-(month<7?1:0);
+  const pending=players.filter(p=>!p.last10?.length&&!p.unavailable&&!p.exclusionReason&&['L','R','LW','RW'].includes(String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase()));
+  let next=0;
+  await Promise.all(Array.from({length:2},async()=>{
+   while(next<pending.length&&token===comboToken){
+    const p=pending[next++];
+    status.textContent='Aktuelle NHL-Torform wird geprüft · '+next+'/'+pending.length;
+    try{const d=await get({action:'player-form',id:p.id,season,date},'nhl');p.last10=d.data?.last10Games||[];}
+    catch{p.recentFormComplete=false}
+   }
+  }));
+  return;
+ }
  const groups=new Map();for(const p of players){p.recentFormComplete=false;if(!p.teamId)continue;const game=games.find(g=>String(g.fixture.id)===String(p.fixtureId)),leagueId=game?.league?.id,season=game?.league?.season;if(!leagueId||!season)continue;const key=p.teamId+':'+leagueId+':'+season;if(!groups.has(key))groups.set(key,{leagueId,season,players:[]});groups.get(key).players.push(p);}
- let done=0;for(const g of groups.values()){for(let i=0;i<g.players.length;i+=8){if(token!==comboToken)return;const slice=g.players.slice(i,i+8);status.textContent='Aktuelle Fußball-Torform wird geprüft · Team '+(done+1)+'/'+groups.size;try{const r=await fetch('/api/scorer-trends?'+new URLSearchParams({date,players:slice.map(p=>[p.id,p.teamId,g.leagueId,g.season].join(':')).join(',')}),{signal:requestTimeout(55000)});if(!r.ok)continue;const d=await r.json();for(const row of d.players||[]){for(const p of slice.filter(p=>Number(p.id)===Number(row.playerId))){p.recentAppearances=row.recentAppearances;p.recentFormComplete=row.complete===true;}}}catch{}}done++;}
+ let done=0;for(const g of groups.values()){for(let i=0;i<g.players.length;i+=40){if(token!==comboToken)return;const slice=g.players.slice(i,i+40);status.textContent='Aktuelle Fußball-Torform wird geprüft · Team '+(done+1)+'/'+groups.size;try{const r=await fetch('/api/scorer-trends?'+new URLSearchParams({date,players:slice.map(p=>[p.id,p.teamId,g.leagueId,g.season].join(':')).join(',')}),{signal:requestTimeout(55000)});if(!r.ok)continue;const d=await r.json();for(const row of d.players||[]){for(const p of slice.filter(p=>Number(p.id)===Number(row.playerId))){p.recentAppearances=row.recentAppearances;p.recentFormComplete=row.complete===true;}}}catch{}}done++;}
 }
 async function generateMixedHockey(){
  const token=++comboToken,count=Number($('count').value),date=$('date').value;
@@ -818,7 +832,7 @@ async function nhlPlayer(id){const token=++modalToken;openModal('NHL-Torschütze
 
 function nhlTable(rows){return rows.length?`<div class="tablewrap"><table><tr><th>#</th><th>Team</th><th>Sp</th><th>Tore</th><th>Pkt</th></tr>${[...rows].sort((a,b)=>b.points-a.points).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.teamName?.default||r.teamAbbrev?.default)}</td><td>${fmt(r.gamesPlayed)}</td><td>${fmt(r.goalFor)}:${fmt(r.goalAgainst)}</td><td><b>${fmt(r.points)}</b></td></tr>`).join('')}</table></div>`:'<div class="empty">Tabelle nicht verfügbar.</div>'}
 async function loadScorers(g){const el=$('detailbody');el.innerHTML='<div class="loading">Topscorer laden …</div>';try{const rows=demoMode?demoPlayers:(await get({action:'scorers',league:g.league.id,season:g.league.season})).data;if(el!==$('detailbody')||tab!=='scorers')return;el.innerHTML=rows?.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${g.league.season}"><b>${i+1}</b>${portrait(p.player.id,sport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,g.league.season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.goals?.total)} Tore</small></span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar.</div>'}catch(e){if(el===$('detailbody')&&tab==='scorers')el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
-const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Auswahl zurückgesetzt: Nur die letzten 5–10 abgeschlossenen Spiele je Team zählen. Tabellen, H2H, Quoten und Saisonwerte werden nicht gewichtet.</p><label for="drawCount">Kombi-Größe</label><select id="drawCount"><option value="all">Alle passenden Tipps</option>${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Form-Außenseiter laut jüngster Torbilanz; keine Markt-Einstufung. Prozentwerte sind unkalibrierte Formmodell-Schätzungen.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
+const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Nur Spiele aus unterstützten ersten Erwachsenenligen. Die Auswahl nutzt die letzten 5–10 abgeschlossenen Spiele je Team. Tabellen, H2H, Quoten und Saisonwerte werden nicht gewichtet.</p><label for="drawCount">Kombi-Größe</label><select id="drawCount"><option value="all">Alle passenden Tipps</option>${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Form-Außenseiter laut jüngster Torbilanz; keine Markt-Einstufung. Prozentwerte sind unkalibrierte Formmodell-Schätzungen.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
 backtestSection.innerHTML='<div class="backtest-wrap"><div class="eyebrow">FUSSBALL · QUALITÄTSCHECK</div><h2>Vergangene Tipps überprüfen</h2><p class="muted">Historische Spieltage werden ohne Daten aus der Zukunft bewertet. Ein Modell-Rücktest ist kein Nachweis früherer tatsächlich angezeigter Tipps.</p><div class="backtest-controls"><label for="backtestLeague">Wettbewerb</label><select id="backtestLeague" aria-label="Liga für Rücktest"></select><label for="backtestDays">Zeitraum</label><select id="backtestDays"><option value="14">Letzte 14 Tage</option><option value="30" selected>Letzte 30 Tage</option><option value="45">Letzte 45 Tage</option></select><button type="button" id="backtestRun" class="primary">Rücktest starten</button></div><div id="backtestResult" aria-live="polite"><p class="notice">Wähle eine Liga und starte den Vergleich mit vergangenen Ergebnissen.</p></div></div>';
 // Both panels must be inserted before binding their controls. A detached panel
 // caused a startup TypeError and left the Home page completely blank.
@@ -928,9 +942,9 @@ $('drawGenerate').onclick=async()=>{
  const paint=()=>{const picks=[...pool.values()].filter(p=>Date.parse(p.kickoff)>Date.now()).sort((a,b)=>b.score-a.score).slice(0,count);out.innerHTML='<p class="result-status">'+(received?scanned+' / '+total+' Spiele geprüft':'Spielplan konnte noch nicht geladen werden')+' · '+picks.length+' passende Tipps'+(complete?' · Analyse beendet':stopped?' · Analyse unterbrochen':' · Analyse läuft …')+(errors?' · '+errors+' Datenfehler':'')+'. Nur kommende Spiele mit ausreichenden Daten. Startelf/Ausfälle können fehlen.</p>'+picks.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');};
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}
-  out.textContent='Alle Spiele des Spieltags werden schrittweise geprüft …';
+  out.textContent='Spiele der ersten Erwachsenenligen werden geprüft …';
   do{
-   const r=await fetch('/api/draws?'+new URLSearchParams({date,count:'all',batch:'1',offset:String(offset),scanAt:String(scanAt)})),d=await r.json();
+   const r=await fetch('/api/draws?'+new URLSearchParams({date,count:'all',batch:'1',scope:'senior-first',offset:String(offset),scanAt:String(scanAt)})),d=await r.json();
    if(token!==drawToken)return;
    if(!r.ok||d.configured===false){
     if(d.retryAfter&&retries<2){retries++;out.innerHTML='<p class="result-status">'+esc(d.error)+' Neuer Versuch in '+Number(d.retryAfter)+' Sekunden.</p>';await new Promise(resolve=>setTimeout(resolve,Math.min(90,Number(d.retryAfter))*1000));if(token!==drawToken)return;continue}

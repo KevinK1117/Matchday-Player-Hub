@@ -56,4 +56,19 @@ export function isTopFlight(league){
  return allowedDomestic.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
 }
 export function isScorerCompetition(league){return isTopFlight(league)}
-export function isDrawCompetition(league){return isTopFlight(league)}
+// Remis uses the national senior first divisions only. The wider fixture
+// catalogue still includes the approved lower divisions and cups.
+const drawFirstDivisions=makeMap({
+ ...domestic,
+ Germany:'Bundesliga',Spain:'La Liga|LaLiga',Italy:'Serie A',Poland:'Ekstraklasa',
+ Scotland:'Premiership|Premier League',Sweden:'Allsvenskan',Switzerland:'Super League',
+ Japan:'J1 League',Finland:'Veikkausliiga'
+});
+export function isDrawCompetition(league){
+ return !!league&&league.type==='League'&&drawFirstDivisions.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
+}
+export function isDrawFixture(game){
+ const junior=/\b(?:u|under)[\s-]*\d{1,2}\b|\b(?:academy|reserves?|youth|jugend)\b/i;
+ const home=game?.teams?.home?.name,away=game?.teams?.away?.name;
+ return isDrawCompetition(game?.league)&&typeof home==='string'&&typeof away==='string'&&!junior.test(home)&&!junior.test(away);
+}

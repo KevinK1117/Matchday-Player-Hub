@@ -13,7 +13,7 @@ async function api(path,key){
  return rows;
 }
 function parsePairs(raw){
- const parts=String(raw||'').split(',').slice(0,8);
+ const parts=String(raw||'').split(',').slice(0,40);
  const seen=new Set(),out=[];
  for(const part of parts){
   const match=/^(\d{1,10}):(\d{1,10}):(\d{1,10}):(20\d{2})$/.exec(part);
@@ -36,7 +36,7 @@ export default async function handler(req,res){
   if(teams.has(k))teams.get(k).players.push(p);
  }
  const values=[...teams.values()],results=[];
- // Four teams × (one fixture list + up to three player box scores) maximum.
+ // A single team history serves up to 40 players in the same request.
  for(const t of values){
   try{
    const games=(await api('/fixtures?team='+t.team+'&last=16',key))
