@@ -26,3 +26,12 @@ export function projectClock(clock,now=Date.now()){
  const elapsed=Math.min(delta,45),parts=clock.remaining.split(':').map(Number),remaining=Math.max(0,parts[0]*60+parts[1]-elapsed);
  return {...clock,remaining:String(Math.floor(remaining/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0')};
 }
+
+// NHL live status and period are separate fields in the normalized fixture.
+export function isNhlThirdPeriod(status, now=Date.now()) {
+ if(!['LIVE','CRIT','IN'].includes(status?.short))return false;
+ const clock=projectClock(status.clock,now);
+ return clock?.period===3 && (!clock.periodType||clock.periodType==='REG') &&
+  !clock.intermission && /^\d{1,2}:\d{2}$/.test(clock.remaining||'') &&
+  clock.remaining.split(':').some(part=>Number(part)>0);
+}
