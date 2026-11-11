@@ -56,11 +56,11 @@ export function isTopFlight(league){
  return allowedDomestic.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
 }
 export function isScorerCompetition(league){return isTopFlight(league)}
-// Remis uses the national senior first divisions only. The wider fixture
+// Remis uses the national senior first divisions and Germany’s second and third divisions. The wider fixture
 // catalogue still includes the approved lower divisions and cups.
 const drawFirstDivisions=makeMap({
  ...domestic,
- Germany:'Bundesliga',Spain:'La Liga|LaLiga',Italy:'Serie A',Poland:'Ekstraklasa',
+ Germany:'Bundesliga|2. Bundesliga|3. Liga',Spain:'La Liga|LaLiga',Italy:'Serie A',Poland:'Ekstraklasa',
  Scotland:'Premiership|Premier League',Sweden:'Allsvenskan',Switzerland:'Super League',
  Japan:'J1 League',Finland:'Veikkausliiga'
 });

@@ -13,7 +13,7 @@ export async function fetchBerlinSchedule(date){
  const results=await Promise.allSettled([fetchJson('/score/'+date),fetchJson('/score/'+d.toISOString().slice(0,10))]);
  if(results.every(r=>r.status==='rejected'))throw results[0].reason;
  const games=[...new Map(results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value.games||[]).map(g=>[g.id,g])).values()].filter(g=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(g.startTimeUTC))===date);
- return {games};
+ return {games,partial:results.some(r=>r.status==='rejected')};
 }
 export default async function handler(req,res){
  res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=1200');

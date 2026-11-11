@@ -10,7 +10,8 @@ test('similar names never admit unlisted countries, competitions, youth or women
 test('draws admit senior first divisions and exclude youth teams even in matching leagues',()=>{
  const league={country:'England',name:'Premier League',type:'League'};
  assert.equal(isDrawCompetition(league),true);
- for(const l of [{...league,name:'Premier League 2'},{...league,type:'Cup'}, {country:'Germany',name:'2. Bundesliga',type:'League'}, {country:'Japan',name:'J2 League',type:'League'}])assert.equal(isDrawCompetition(l),false);
+ for(const name of ['2. Bundesliga','3. Liga'])assert.equal(isDrawCompetition({country:'Germany',name,type:'League'}),true);
+ for(const l of [{...league,name:'Premier League 2'},{...league,type:'Cup'}, {country:'Germany',name:'Regionalliga',type:'League'}, {country:'Japan',name:'J2 League',type:'League'}])assert.equal(isDrawCompetition(l),false);
  for(const name of ['Sunderland U21','India U17','Team Under-19','Club Academy'])assert.equal(isDrawFixture({league,teams:{home:{name},away:{name:'Senior Club'}}}),false);
  assert.equal(isDrawFixture({league,teams:{home:{name:'Sunderland'},away:{name:'Arsenal'}}}),true);
 });
