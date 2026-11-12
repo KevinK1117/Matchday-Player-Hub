@@ -45,3 +45,11 @@ test('batched whole-matchday scan retains more than twenty signals from eligible
  return {ok:true,json:async()=>({response})};};
  try{let offset=0,finished=false,batches=0;const seen=new Set();while(!finished){let body;await handler({query:{date:'2099-11-07',count:'all',batch:'1',offset:String(offset)}},{setHeader(){},status(){return this},json(d){body=d}});assert.equal(body.totalFixtures,26);batches++;assert(body.considered<=8);assert(body.nextOffset>offset);for(const p of body.candidates){seen.add(p.fixtureId);assert.equal(p.injuriesAvailable,false);assert.equal(p.lineup,undefined);assert(p.homeForm.homeScored>0);assert(p.awayForm.awayPoints>0)}offset=body.nextOffset;finished=body.scanComplete}assert.equal(offset,26);assert.equal(seen.size,26);assert.equal(batches,4);assert.equal(requested.size,52);assert([...requested].every(id=>id<999991))}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });
+
+test('football draw form uses the 90-minute cup score and skips missing regulation results',()=>{
+ const game={fixture:{date:'2026-11-01T19:00:00Z',status:{short:'AET'}},teams:{home:{id:1},away:{id:2}},goals:{home:2,away:1},score:{fulltime:{home:1,away:1}}};
+ const result=form([game,{...game,score:undefined}],1,'2026-11-02');
+ assert.equal(result.played,1);
+ assert.equal(result.drawRate,1);
+ assert.equal(result.scored,1);
+});

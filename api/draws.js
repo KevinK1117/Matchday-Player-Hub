@@ -61,10 +61,19 @@ function providerPercent(value){
 }
 async function enrichCandidates(candidates){return {candidates:candidates.map(p=>({...p,dataQuality:'Vorläufig – nicht unabhängig bestätigt',providerPrediction:null,injuriesAvailable:false,qualityFlags:['Nur jüngste Form aus 5–10 Spielen; keine Quoten-, Tabellen- oder Ausfallgewichtung']})),screened:0,rejected:0,injuriesAvailable:false,predictionsAvailable:0};}
 
-const completed=g=>['FT','AET','PEN'].includes(g.fixture?.status?.short)&&g.goals?.home!=null&&g.goals?.away!=null;
+function regulationScore(game){
+ const status=game.fixture?.status?.short;
+ if(!['FT','AET','PEN'].includes(status))return null;
+ const score=game.score?.fulltime??(status==='FT'?game.goals:null);
+ return Number.isInteger(score?.home)&&Number.isInteger(score?.away)?score:null;
+}
 export function form(rows,id,date){
- const games=rows.filter(g=>completed(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
- const details=games.map(g=>{const home=Number(g.teams.home.id)===Number(id),scored=Number(home?g.goals.home:g.goals.away),conceded=Number(home?g.goals.away:g.goals.home);return {home,scored,conceded,points:scored>conceded?3:scored===conceded?1:0,draw:scored===conceded}});
+ const games=rows.filter(g=>regulationScore(g)&&String(g.fixture?.date||'').slice(0,10)<date).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,10);
+ const details=games.map(g=>{
+  const home=Number(g.teams.home.id)===Number(id),score=regulationScore(g);
+  const scored=home?score.home:score.away,conceded=home?score.away:score.home;
+  return {home,scored,conceded,points:scored>conceded?3:scored===conceded?1:0,draw:scored===conceded};
+ });
  const avg=(arr,key)=>arr.length?arr.reduce((n,x)=>n+x[key],0)/arr.length:null;
  const home=details.filter(x=>x.home),away=details.filter(x=>!x.home);
  return {scoringGames:details.filter(x=>x.scored>0).length,scoringRate:avg(details.map(x=>({hit:x.scored>0})), 'hit'),winRate:avg(details.map(x=>({hit:x.points===3})), 'hit'),last5Points:details.slice(0,5).reduce((n,x)=>n+x.points,0),last5Played:details.slice(0,5).length,played:details.length,points:details.reduce((n,x)=>n+x.points,0),drawRate:avg(details,'draw'),scored:avg(details,'scored'),conceded:avg(details,'conceded'),homePlayed:home.length,awayPlayed:away.length,homePoints:avg(home,'points'),awayPoints:avg(away,'points'),homeScored:avg(home,'scored'),awayScored:avg(away,'scored'),homeConceded:avg(home,'conceded'),awayConceded:avg(away,'conceded'),last5Scored:avg(details.slice(0,5),'scored'),last5Conceded:avg(details.slice(0,5),'conceded')};
