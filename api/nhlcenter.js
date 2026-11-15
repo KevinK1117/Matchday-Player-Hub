@@ -120,10 +120,14 @@ export default async function handler(req,res){
  if(a==='draws'){
   const date=String(q.date),season=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
   const schedule=await fetchBerlinSchedule(date);
-  data=await analyzeNhlDraws(schedule.games.map(normalizeGame),async club=>{
-   const history=await fetchJson('/club-schedule-season/'+club+'/'+season+(season+1));
+  const loadSeason=async(club,year)=>{
+   const history=await fetchJson('/club-schedule-season/'+club+'/'+year+(year+1));
    if(!Array.isArray(history.games))throw Error('NHL-Spielhistorie fehlt');
    return history.games;
+  };
+  data=await analyzeNhlDraws(schedule.games.map(normalizeGame),club=>loadSeason(club,season),Date.now(),async club=>{
+   const previous=await loadSeason(club,season-1);
+   return previous.concat(await loadSeason(club,season-2));
   });
   if(schedule.partial)data.errors++;
  }

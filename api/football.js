@@ -1,3 +1,4 @@
+import {footballH2h} from '../lib/football-h2h.js';
 import {footballReference,scorerRole} from '../lib/lineup-reference.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {isScorerCompetition} from '../public/competitions.js';
@@ -84,23 +85,13 @@ if(missingSelection.length){
 }
 // Head-to-head is evaluated only on finished meetings between these exact clubs.
 // No H2H record means no evidence of superiority, not an assumed win.
-const h2hGames=games.slice(0,24);
-const h2hResults=await Promise.allSettled(h2hGames.map(async g=>({id:g.id,homeId:g.homeId,awayId:g.awayId,rows:await api('/fixtures/headtohead?h2h='+g.homeId+'-'+g.awayId+'&last=8',key)})));
+const h2hGames=games.filter(g=>g.status==='NS'&&Date.parse(g.start)>Date.now()).slice(0,24);
+const h2hResults=await Promise.allSettled(h2hGames.map(async g=>({id:g.id,homeId:g.homeId,awayId:g.awayId,start:g.start,rows:await api('/fixtures/headtohead?h2h='+g.homeId+'-'+g.awayId+'&last=8',key)})));
 const h2hByFixture=new Map();
 for(const result of h2hResults){
  if(result.status!=='fulfilled')continue;
- const {id,homeId,awayId,rows}=result.value;
- const finished=(Array.isArray(rows)?rows:[]).filter(x=>['FT','AET','PEN'].includes(x.fixture?.status?.short)&&Number.isFinite(Number(x.goals?.home))&&Number.isFinite(Number(x.goals?.away)));
- let homeWins=0,awayWins=0,draws=0;
- for(const x of finished){
-  const homeGoals=Number(x.goals.home),awayGoals=Number(x.goals.away);
-  if(homeGoals===awayGoals){draws++;continue}
-  const winner=homeGoals>awayGoals?Number(x.teams?.home?.id):Number(x.teams?.away?.id);
-  if(winner===Number(homeId))homeWins++;
-  else if(winner===Number(awayId))awayWins++;
- }
- const superiorTeamId=finished.length>=3&&homeWins!==awayWins?(homeWins>awayWins?Number(homeId):Number(awayId)):null;
- h2hByFixture.set(id,{played:finished.length,homeWins,awayWins,draws,superiorTeamId});
+ const {id,homeId,awayId,start,rows}=result.value;
+ h2hByFixture.set(id,footballH2h(rows,homeId,awayId,Date.parse(start)));
 }
 const playerByKey=new Map();for(const result of results){if(result.status!=='fulfilled')continue;const {league,rows}=result.value;for(const item of rows){for(const stat of item.statistics||[]){const matching=games.filter(g=>(g.leagueId===league||cupTeams.has(Number(stat.team?.id))&&cupGames.some(c=>c.id===g.id))&&(g.homeId===stat.team?.id||g.awayId===stat.team?.id));if(!matching.length)continue;const played=Number(stat.games?.appearences||0),minutes=Number(stat.games?.minutes||0),goals=Number(stat.goals?.total||0),shots=stat.shots?.on==null?null:Number(stat.shots.on),penalties=Number(stat.penalty?.scored||0);if(!played)continue;for(const g of matching){const k=g.id+':'+item.player.id;const player={id:item.player.id,name:item.player.name,team:stat.team.name,teamId:stat.team.id,position:stat.games?.position||null,opponent:g.homeId===stat.team.id?g.away:g.home,fixtureId:g.id,league:g.league,statisticsLeagueId:stat.league?.id||league,statisticsSource:(stat.league?.id||league)===g.leagueId?'Wettbewerbsstatistik':'Ligastatistik als Pokal-/Europapokal-Grundlage',goals,appearances:played,minutes,minutesPerGame:minutes/played,goalsPerGame:goals/played,totalShots:stat.shots?.total??null,shotsPerGame:shots===null?null:shots/played,penaltyGoals:penalties,xG:null,xG90:null,participation:'Nicht bestätigt',photo:item.player.photo,score:(goals/played)*5+(shots===null?0:shots/played)*1.7+(minutes/played)/90+penalties*.04};if(!playerByKey.has(k)||playerByKey.get(k).appearances<player.appearances)playerByKey.set(k,player)}}}}
 // Official lineups are returned only when the provider has published them.

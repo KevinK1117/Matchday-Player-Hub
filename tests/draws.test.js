@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import handler,{form} from '../api/draws.js';
+
+const directResults=(home,away)=>Array.from({length:4},(_,i)=>({
+ fixture:{id:7000+i,date:'2026-10-'+(10+i)+'T12:00:00Z',status:{short:'FT'}},
+ teams:{home:{id:home},away:{id:away}},goals:{home:1,away:1}
+}));
 test('last-five form excludes future and unfinished fixtures',()=>{
  const rows=Array.from({length:8},(_,i)=>({fixture:{date:`2026-10-${String(20-i).padStart(2,'0')}T12:00:00Z`,status:{short:'FT'}},teams:{home:{id:1},away:{id:2}},goals:{home:i<5?2:0,away:1}}));
  rows.push({...rows[0],fixture:{date:'2026-10-23T12:00:00Z',status:{short:'FT'}}});
@@ -15,13 +20,13 @@ test('partial analysis exposes real candidates without claiming a complete combo
  const fixture={fixture:{id:990001,date:'2099-10-22T18:00:00Z',status:{short:'NS'}},league:{id:78,name:'Bundesliga',country:'Germany',type:'League',season:2026},teams:{home:{id:1,name:'Home'},away:{id:2,name:'Away'}}};
  globalThis.fetch=async input=>{const url=new URL(input);let rows=[];
  if(url.pathname==='/standings')rows=[{league:{standings:[[{team:{id:1},rank:3,points:15,all:{played:5}},{team:{id:2},rank:4,points:14,all:{played:5}}]]}}];
- else if(url.pathname.includes('headtohead'))rows=[];
+ else if(url.pathname.includes('headtohead'))rows=directResults(1,2);
  else if(url.searchParams.has('team')){const id=Number(url.searchParams.get('team'));rows=Array.from({length:8},(_,i)=>({fixture:{id:100+id*10+i,date:`2026-10-${10+i}T12:00:00Z`,status:{short:'FT'}},league:fixture.league,teams:i%2?{home:{id},away:{id:99}}:{home:{id:99},away:{id}},goals:{home:1,away:1}}))}
  else rows=[fixture];
  return {ok:true,json:async()=>({response:rows})};
  };
  let body,code=200;const res={setHeader(){},status(n){code=n;return this},json(d){body=d}};
- try{await handler({query:{date:'2099-10-22',count:'6'}},res);assert.equal(code,200);assert.equal(body.complete,false);assert.equal(body.picks.length,0);assert.equal(body.candidates.length,1);assert.equal(body.candidates[0].fixtureId,990001);assert.equal(body.diagnostics.providerErrors,0);assert.match(body.notice,/1 vorläufige Modellkandidaten/)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
+ try{await handler({query:{date:'2099-10-22',count:'6'}},res);assert.equal(code,200);assert.equal(body.complete,false);assert.equal(body.picks.length,0);assert.equal(body.candidates.length,1);assert.equal(body.candidates[0].fixtureId,990001);assert.equal(body.candidates[0].h2h.draws,4);assert.equal(body.candidates[0].score,100);assert.equal(body.diagnostics.providerErrors,0);assert.match(body.notice,/1 vorläufige Modellkandidaten/)}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
 });
 test('analysis bounds provider concurrency and does not fetch standings for form-only selection',async()=>{
  const oldFetch=globalThis.fetch,oldKey=process.env.API_SPORTS_KEY;process.env.API_SPORTS_KEY='test-only';let active=0,maxActive=0,standingsRequests=0;
@@ -41,6 +46,7 @@ test('batched whole-matchday scan retains more than twenty signals from eligible
  const requested=new Set();
  globalThis.fetch=async input=>{const u=new URL(input);let response=[];
  if(u.pathname==='/fixtures'&&u.searchParams.has('date'))response=[...games,youth,lower];
+ else if(u.pathname==='/fixtures/headtohead')response=directResults(...u.searchParams.get('h2h').split('-').map(Number));
  else if(u.pathname==='/fixtures'&&u.searchParams.has('team')){const id=Number(u.searchParams.get('team'));requested.add(id);response=Array.from({length:10},(_,i)=>({fixture:{id:id*100+i,date:'2099-10-'+String(10+i).padStart(2,'0'),status:{short:'FT'}},league,teams:i%2?{home:{id},away:{id:999}}:{home:{id:999},away:{id}},goals:{home:1,away:1}}))}
  return {ok:true,json:async()=>({response})};};
  try{let offset=0,finished=false,batches=0;const seen=new Set();while(!finished){let body;await handler({query:{date:'2099-11-07',count:'all',batch:'1',offset:String(offset)}},{setHeader(){},status(){return this},json(d){body=d}});assert.equal(body.totalFixtures,26);batches++;assert(body.considered<=8);assert(body.nextOffset>offset);for(const p of body.candidates){seen.add(p.fixtureId);assert.equal(p.injuriesAvailable,false);assert.equal(p.lineup,undefined);assert(p.homeForm.homeScored>0);assert(p.awayForm.awayPoints>0)}offset=body.nextOffset;finished=body.scanComplete}assert.equal(offset,26);assert.equal(seen.size,26);assert.equal(batches,4);assert.equal(requested.size,52);assert([...requested].every(id=>id<999991))}finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.API_SPORTS_KEY;else process.env.API_SPORTS_KEY=oldKey}
@@ -52,4 +58,18 @@ test('football draw form uses the 90-minute cup score and skips missing regulati
  assert.equal(result.played,1);
  assert.equal(result.drawRate,1);
  assert.equal(result.scored,1);
+});
+
+test('direct comparisons use the exact pair before kickoff and count a cup tie only once',async()=>{
+ const {footballH2h}=await import('../lib/football-h2h.js');
+ const rows=directResults(1,2).slice(0,3);
+ rows[0].fixture.status.short='AET';
+ rows[0].goals={home:2,away:1};
+ rows[0].score={fulltime:{home:1,away:1}};
+ rows[1].teams={home:{id:2},away:{id:1}};
+ rows[1].goals={home:0,away:2};
+ rows[2].goals={home:1,away:0};
+ const future={...rows[2],fixture:{...rows[2].fixture,id:9000,date:'2026-10-25T12:00:00Z'}};
+ assert.deepEqual(footballH2h([...rows,rows[0],future,...directResults(1,3)],1,2,Date.parse('2026-10-25T12:00:00Z')),
+  {played:3,homeWins:2,awayWins:0,draws:1,superiorTeamId:1});
 });

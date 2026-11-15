@@ -1,3 +1,7 @@
+export function matchesFootballH2h(player){
+ return !player.h2h?.superiorTeamId||Number(player.teamId)===Number(player.h2h.superiorTeamId);
+}
+
 import {scorerRecentForm} from './recent-form.js';
 import {threeFactorScorer,footballThreeFactorScorer} from './scorer-model.js';
 // Keep a strict, evidence-based scorer ranking; missing data never creates invented picks.
@@ -8,7 +12,7 @@ function eligibleScorer(p,confirmedOnly=false){
  const state=String(p.participation||'');
  if(state==='Ausfall gemeldet'||state.startsWith('Nicht in bestätigter Startelf')||state.startsWith('Extern als Ausfall'))return false;
  const nhl=p.sport==='nhl',confirmed=nhl?state==='Bestätigter Einsatz':state==='Startelf bestätigt';
- if(!nhl&&p.h2h?.superiorTeamId&&Number(p.teamId)!==Number(p.h2h.superiorTeamId))return false;
+ if(!nhl&&!matchesFootballH2h(p))return false;
  if(confirmedOnly&&!confirmed)return false;
  if(p.questionable&&!confirmed)return false;
  if(p.externalExpectedMinutes!=null&&Number(p.externalExpectedMinutes)<50)return false;
@@ -26,7 +30,8 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
  for(const p of players){
   const game=fixtures.get(String(p.fixtureId)),nhl=p.sport==='nhl';
   const formOnly=options.model==='recent-form';
-  if(!game||!p||p.id==null||!p.name||p.unavailable||(p.exclusionReason&&(!formOnly||!/Kein (Außenstürmer|Stürmer)|Zu geringe|H2H/.test(p.exclusionReason)))||(!formOnly&&!eligibleScorer(p,confirmedOnly)))continue;
+  if(!game||!p||p.id==null||!p.name||p.unavailable||(p.exclusionReason&&(!formOnly||!/Kein (Außenstürmer|Stürmer)|Zu geringe/.test(p.exclusionReason)))||(!formOnly&&!eligibleScorer(p,confirmedOnly)))continue;
+  if(formOnly&&!nhl&&!matchesFootballH2h(p))continue;
   const role=String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase();
   if(formOnly&&!(nhl?['L','R','LW','RW']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(role))continue;
   const analysis=formOnly?scorerRecentForm(p,now):options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;

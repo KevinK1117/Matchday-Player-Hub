@@ -9,7 +9,12 @@ test('regulation ties count OT and shootout games once and exclude unfinished or
 });
 test('upcoming NHL ties use both teams’ verified samples and distinguish a failed history fetch',async()=>{
  const game={fixture:{id:1,date:kickoff,status:{short:'NS'}},teams:{home:{abbrev:'TOR',name:'Toronto'},away:{abbrev:'COL',name:'Colorado'}}};
- const result=await analyzeNhlDraws([game],async club=>history(club),Date.parse('2099-11-11'));
+ const meetings=history('TOR').map((row,i)=>({...row,id:100+i,awayTeam:{abbrev:'COL',score:2}}));
+ const result=await analyzeNhlDraws([game],async club=>history(club),Date.parse('2099-11-11'),async()=>meetings);
+ assert.equal(result.candidates[0].h2h.played,5);
+ const noMeetings=await analyzeNhlDraws([game],async club=>history(club),Date.parse('2099-11-11'));
+ assert.equal(noMeetings.insufficient,1);
+ assert.equal(noMeetings.candidates.length,0);
  assert.equal(result.candidates[0].score,40);assert.equal(result.candidates[0].sport,'nhl');
  const partial=await analyzeNhlDraws([game],async club=>{if(club==='COL')throw Error('offline');return history(club)},Date.parse('2099-11-11'));
  assert.equal(partial.candidates.length,0);assert.equal(partial.errors,1);
