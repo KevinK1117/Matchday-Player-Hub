@@ -63,12 +63,14 @@ export default async function handler(req,res){
     }
   }catch{}
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
-  // A large parallel fan-out caused NHL API 429. Enrich only selected top-ranked players, sequentially.
+  // A small worker pool keeps the NHL enrichment bounded and stops dispatching on rate limits.
   const shortlist=players.filter(p=>['L','R','LW','RW'].includes(p.position)).slice(0,16);
   const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
   let stoppedForRateLimit=false;
-  for(const p of shortlist){
-    if(stoppedForRateLimit)break;
+  let nextPlayer=0;
+  await Promise.all(Array.from({length:Math.min(2,shortlist.length)},async()=>{
+   while(!stoppedForRateLimit&&nextPlayer<shortlist.length){
+    const p=shortlist[nextPlayer++];
     try{
       const log=await fetchJson(`/player/${p.id}/game-log/${yr}${yr+1}/2`);
       Object.assign(p,recentScorerForm(log.gameLog||[],date));
@@ -92,7 +94,8 @@ export default async function handler(req,res){
       p.participation=(log.gameLog||[]).some(g=>games.some(m=>String(m.id)===String(g.gameId)))?'Bestätigter Einsatz':'Einsatz nicht bestätigt';
     }catch(err){p.participation='Einsatz nicht bestätigt';p.last5=[];p.toiLast5=null;p.ppToiLast5=null;if(err.rateLimited)stoppedForRateLimit=true;}
     if(!stoppedForRateLimit)await pause(120);
-  }
+   }
+  }));
   // Re-rank with recent verified form and usage; unavailable detail adds no imaginary advantage.
   for(const p of players){
     if(p.last10?.length>=3){

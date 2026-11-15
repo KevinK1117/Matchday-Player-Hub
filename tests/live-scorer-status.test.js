@@ -11,12 +11,16 @@ test('NHL live selection reads the period and remaining time from the normalized
  const clock=nhlClock({periodDescriptor:{number:3,periodType:'REG'},clock:{timeRemaining:'04:10'}});
  const game={sport:'nhl',fixture:{id:1,date:kickoff,status:{short:'LIVE',clock}},teams:{home:{id:1,name:'Home'},away:{id:2,name:'Away'}},goals:{home:2,away:1}};
  const history=Array.from({length:5},(_,i)=>({...game,fixture:{id:i+10,date:`2026-11-0${i+1}T00:00:00Z`,status:{short:'FT'}}}));
- const elements={liveSport:{value:'nhl'},liveCount:{value:'3'},date:{value:'2026-11-11'},liveMeta:{},liveResult:{}};
- let fixture=game;
- const context=vm.createContext({$:id=>elements[id],liveBusy:false,liveLast:0,view:'combo',document:{visibilityState:'visible'},isNhlThirdPeriod,teamRecentForm,liveRecentForm,esc:String,liveTipCard:x=>matchClockLabel(x.g),get:async q=>q.action==='fixtures'?{configured:true,data:[fixture]}:{data:{homeRecent:{data:history},awayRecent:{data:history}}}});
+ const elements={liveSport:{value:'nhl'},liveCount:{value:'3'},date:{value:'2026-11-11'},liveMeta:{},liveResult:{querySelectorAll:()=>opened}};
+ let fixture=game,detailCalls=0,opened=[];
+ const context=vm.createContext({$:id=>elements[id],liveBusy:false,liveLast:0,liveFormCache:new Map(),view:'combo',document:{visibilityState:'visible'},isNhlThirdPeriod,teamRecentForm,liveRecentForm,esc:String,liveTipCard:(x,i,key,expanded)=>matchClockLabel(x.g)+(expanded?' · offen':''),get:async q=>q.action==='fixtures'?{configured:true,data:[fixture]}:(detailCalls++,{data:{homeRecent:{data:history},awayRecent:{data:history}}})});
  vm.runInContext(html.slice(html.indexOf('async function liveCombo('),html.indexOf('async function loadRecentScorers(')),context);
  await context.liveCombo(true);
  assert.match(elements.liveResult.innerHTML,/3\. Drittel · 04:10/);
+ opened=[{dataset:{liveFixture:'nhl:1:'+kickoff}}];
+ await context.liveCombo(true);
+ assert.equal(detailCalls,1);
+ assert.match(elements.liveResult.innerHTML,/04:10 übrig · offen/);
  for(const replacement of [{period:2},{periodType:'OT'},{intermission:true},{remaining:null},{remaining:'00:00'}]){
   fixture={...game,fixture:{...game.fixture,status:{short:'LIVE',clock:{...clock,...replacement}}}};
   await context.liveCombo(true);
