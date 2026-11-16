@@ -13,7 +13,7 @@ test('NHL live selection reads the period and remaining time from the normalized
  const history=Array.from({length:5},(_,i)=>({...game,fixture:{id:i+10,date:`2026-11-0${i+1}T00:00:00Z`,status:{short:'FT'}}}));
  const elements={liveSport:{value:'nhl'},liveCount:{value:'3'},date:{value:'2026-11-11'},liveMeta:{},liveResult:{querySelectorAll:()=>opened}};
  let fixture=game,detailCalls=0,opened=[];
- const context=vm.createContext({renderTipQuotes:()=>{},$:id=>elements[id],liveBusy:false,liveLast:0,liveFormCache:new Map(),view:'combo',document:{visibilityState:'visible'},isNhlThirdPeriod,teamRecentForm,liveRecentForm,esc:String,liveTipCard:(x,i,key,expanded)=>matchClockLabel(x.g)+(expanded?' · offen':''),get:async q=>q.action==='fixtures'?{configured:true,data:[fixture]}:(detailCalls++,{data:{homeRecent:{data:history},awayRecent:{data:history}}})});
+ const context=vm.createContext({renderTipQuotes:()=>{},$:id=>elements[id],liveBusy:false,liveLast:0,liveFormCache:new Map(),view:'combo',document:{visibilityState:'visible'},isNhlThirdPeriod,teamRecentForm,liveRecentForm,esc:String,liveTipCard:(x,i,key,expanded)=>matchClockLabel(x.g)+(expanded?' · offen':''),get:async q=>q.action==='del-live'?{configured:true,data:[]}:q.action==='fixtures'?{configured:true,data:[fixture]}:(detailCalls++,{data:{homeRecent:{data:history},awayRecent:{data:history}}})});
  vm.runInContext(html.slice(html.indexOf('async function liveCombo('),html.indexOf('async function loadRecentScorers(')),context);
  await context.liveCombo(true);
  assert.match(elements.liveResult.innerHTML,/3\. Drittel · 04:10/);

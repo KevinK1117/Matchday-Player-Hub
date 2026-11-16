@@ -1,3 +1,4 @@
+import {hockeyOdds} from '../lib/hockey-odds.js';
 import {normalizeName} from '../lib/football-evidence.js';
 
 const root='https://api.sportmonks.com/v3/football/';
@@ -75,12 +76,14 @@ export function selectQuote(prices,market,selection,fixtureId,now=Date.now()){
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  if(req.method&&req.method!=='GET')return res.status(405).json({error:'Nur GET verfügbar'});
- const {home,away,start,market,selection}=req.query||{};
+ const {home,away,start,market,selection,sport='football'}=req.query||{};
  const validText=s=>typeof s==='string'&&s.length<=120&&normalizeName(s).length>0;
  const live=['first-half-over','full-time-over'].includes(market);
- const validSelection=market==='result'?['home','away','draw'].includes(selection):market==='scorer'?validText(selection):live&&typeof selection==='string'&&/^\d{1,2}\.5$/.test(selection);
+ const validSelection=market==='result'?['home','away','draw','all'].includes(selection):market==='scorer'?validText(selection):live&&typeof selection==='string'&&/^\d{1,2}\.5$/.test(selection);
  const kickoff=typeof start==='string'&&/^\d{4}-\d\d-\d\dT/.test(start)?utcTime(start):NaN;
  if(!validText(home)||!validText(away)||!validSelection||!Number.isFinite(kickoff))return res.status(400).json({error:'Ungültiger Quotenmarkt oder Spiel'});
+ if(['nhl','del'].includes(sport))return res.status(200).json(await hockeyOdds(sport,{home,away,kickoff,market,selection}));
+ if(sport!=='football')return res.status(400).json({error:'Unbekannte Sportart'});
  const token=process.env.SPORTMONKS_API_TOKEN;
  const reply=(status,quote=null)=>res.status(200).json({source:'Sportmonks',status,quote});
  if(!token)return reply('not_configured');
@@ -92,7 +95,21 @@ export default async function handler(req,res){
   if(!fixture)return reply('no_fixture');
   const type=live?'inplay':'pre-match';
   const prices=await rows('odds/'+type+'/fixtures/'+fixture.id,{include:'bookmaker'},token,live?10000:60000);
-  const quote=selectQuote(prices,market,selection,fixture.id);
+  let quote=null;
+  if(market==='result'&&selection==='all'){
+   const byBook=new Map();
+   for(const row of prices){
+    const key=row.bookmaker_id+':'+row.market_id;
+    if(!byBook.has(key))byBook.set(key,[]);
+    byBook.get(key).push(row);
+   }
+   const books=[...byBook.values()].flatMap(rows=>{
+    const home=selectQuote(rows,'result','home',fixture.id),draw=selectQuote(rows,'result','draw',fixture.id),away=selectQuote(rows,'result','away',fixture.id);
+    if(!home||!draw||!away)return [];
+    return [{bookmaker:home.bookmaker,updatedAt:home.updatedAt,prices:{home:home.price,draw:draw.price,away:away.price}}];
+   });
+   quote=books.sort((a,b)=>(Date.parse(b.updatedAt)||0)-(Date.parse(a.updatedAt)||0))[0]||null;
+  }else quote=selectQuote(prices,market,selection,fixture.id);
   return reply(quote?'available':'no_quote',quote);
  }catch{
   return reply('provider_unavailable');

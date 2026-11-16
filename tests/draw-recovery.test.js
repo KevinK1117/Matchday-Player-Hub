@@ -25,8 +25,8 @@ test('the NHL tab starts a mixed scan and displays both sports even with identic
  const code=html.slice(start,html.indexOf('function leagueSeason',start));
  const elements={drawGenerate:{},drawResult:{},date:{value:'2099-11-07'},drawCount:{value:'all'}};
  const pick={fixtureId:1,kickoff:'2099-11-07T19:00:00Z',score:25};
- const context=vm.createContext({renderTipQuotes:()=>{},sport:'nhl',$:id=>elements[id],drawToken:0,demoMode:false,URLSearchParams,esc:s=>s,drawPickCard:p=>'<article>'+p.sport+'</article>',get:async(q,sp)=>{assert.equal(q.action,'draws');assert.equal(sp,'nhl');return {data:{candidates:[{...pick,sport:'nhl'}],considered:1,totalFixtures:1}}},fetch:async url=>{assert.match(url,/api\/draws/);return {ok:true,json:async()=>({totalFixtures:1,considered:1,scanComplete:true,diagnostics:{},verifiedCandidates:[{...pick,sport:'football'}]})}}});
+ const context=vm.createContext({renderTipQuotes:()=>{},sport:'nhl',$:id=>elements[id],drawToken:0,demoMode:false,URLSearchParams,esc:s=>s,drawPickCard:p=>'<article>'+p.sport+'</article>',get:async(q,sp)=>{assert.equal(q.action,sp==='nhl'?'draws':'del-analysis');return {data:{candidates:[{...pick,sport:sp}],considered:1,totalFixtures:1}}},fetch:async url=>{assert.match(url,/api\/draws/);return {ok:true,json:async()=>({totalFixtures:1,considered:1,scanComplete:true,diagnostics:{},verifiedCandidates:[{...pick,sport:'football'}]})}}});
  vm.runInContext(code,context);await elements.drawGenerate.onclick();
  assert.equal(elements.drawGenerate.disabled,false);
- assert.match(elements.drawResult.innerHTML,/<article>football<\/article><article>nhl<\/article>/);
+ assert.match(elements.drawResult.innerHTML,/<article>football<\/article><article>nhl<\/article><article>del<\/article>/);
 });
