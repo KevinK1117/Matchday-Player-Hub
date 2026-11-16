@@ -20,7 +20,7 @@ test('DEL resolves team data and the last lineup without a fixture in the detail
   if(path.endsWith('/roster')){assert.equal(params.get('season_id'),'ss_test');data=[{player,position:'right_wing',games:10}];}
   if(path.startsWith('/v1/teams/')&&path.endsWith('/games'))data=[last];
   if(path.endsWith('/lineups'))data=[{player,side:'home',position:null}];
-  if(path.endsWith('/standings'))data=[{position:1,team:home,points:12}];
+  if(path.endsWith('/standings'))data=[{position:1,team:home,points:12},{position:2,team:away,points:10}];
   return Response.json({data});
  };
  try{
