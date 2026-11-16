@@ -85,14 +85,16 @@ export default async function handler(req,res){
  if(['nhl','del'].includes(sport))return res.status(200).json(await hockeyOdds(sport,{home,away,kickoff,market,selection}));
  if(sport!=='football')return res.status(400).json({error:'Unbekannte Sportart'});
  const token=process.env.SPORTMONKS_API_TOKEN;
- const reply=(status,quote=null)=>res.status(200).json({source:'Sportmonks',status,quote});
+ const archived=req.query?.archive==='1'&&market==='result'&&selection==='all'&&kickoff<=Date.now();
+ const reply=(status,quote=null)=>res.status(200).json({source:'Sportmonks',status,quote,...(archived?{archived:true}:{})});
  if(!token)return reply('not_configured');
- if(!live&&kickoff<=Date.now())return reply('no_quote');
+ if(!live&&!archived&&kickoff<=Date.now())return reply('no_quote');
  try{
   const date=new Date(kickoff).toISOString().slice(0,10);
   const fixtures=await rows('fixtures/date/'+date,{include:'participants'},token,300000);
   const fixture=matchFixture(fixtures,home,away,kickoff);
   if(!fixture)return reply('no_fixture');
+  if(archived&&![5,8,9].includes(fixture.state_id))return reply('no_quote');
   const type=live?'inplay':'pre-match';
   const prices=await rows('odds/'+type+'/fixtures/'+fixture.id,{include:'bookmaker'},token,live?10000:60000);
   let quote=null;

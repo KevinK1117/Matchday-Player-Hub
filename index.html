@@ -351,10 +351,28 @@ html[data-theme="dark"] .pitch[data-sport="football"]{color-scheme:light;backgro
 html[data-theme="dark"] .pitch[data-sport="football"] .pitch-person{color:#fff!important}
 </style><style id="unified-player-cards">
 .hockey-leagues{display:flex;gap:8px;margin-top:8px}.hockey-leagues.hidden{display:none}
-.match.has-schedule-odds{grid-template-columns:25px 48px minmax(0,1fr) 30px 43px;column-gap:6px}
-.match.has-schedule-odds .arrow{display:none}
-.schedule-odds{grid-column:5;grid-row:1;display:grid;justify-items:end;align-self:center;gap:2px;font-size:11px;line-height:1.15;font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink)}
-.schedule-odds span{display:block;white-space:nowrap}
+.match.schedule-match,.match.schedule-match:has(.clock.live),.schedule-columns{grid-template-columns:22px 48px minmax(0,1fr) repeat(3,minmax(34px,44px)) 32px;column-gap:5px}
+.schedule-columns{display:grid;align-items:center;text-align:center;padding:5px 14px;color:var(--muted);font-size:11px;font-weight:650;border-bottom:1px solid var(--line)}
+.schedule-columns .odds-heading{grid-column:4/7;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.schedule-columns .score-heading{grid-column:7;font-size:10px}
+.schedule-match .teams{grid-column:3;grid-row:1}
+.schedule-match .scores{grid-column:7;grid-row:1;font-variant-numeric:tabular-nums}
+.schedule-match .scores span,.schedule-match .team{display:flex;align-items:center;min-height:25px}
+.schedule-match .scores span{justify-content:center}
+.schedule-match .team{line-height:1.35;overflow-wrap:anywhere}
+.schedule-match .clock{line-height:1.25;font-variant-numeric:tabular-nums}
+.schedule-match .clock time{display:block;font-size:12px;font-weight:700;color:var(--ink)}
+.schedule-match .clock.live time{color:inherit}
+.schedule-match .clock small{display:block;margin-top:3px;font-size:9px}
+.schedule-odds{grid-column:4/7;grid-row:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;align-self:center;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.schedule-odds span{display:grid;place-items:center;min-height:34px;border:1px solid var(--line);border-radius:7px;background:var(--bg);white-space:nowrap}
+@media(max-width:420px){
+ .match.schedule-match,.match.schedule-match:has(.clock.live),.schedule-columns{grid-template-columns:19px 36px minmax(0,1fr) repeat(3,minmax(29px,36px)) 26px;column-gap:4px;padding-left:8px;padding-right:8px}
+ .schedule-columns .odds-heading,.schedule-odds{gap:4px}
+ .schedule-match .team{gap:5px}
+ .schedule-match .crest{flex:none;width:18px;height:18px}
+ .schedule-odds span{font-size:10px}
+}
 .del-line-card .avatar{display:grid;place-items:center;font-weight:700;color:#17263c;background:#d4e3eb}
 
 
@@ -461,7 +479,23 @@ function render(){drawLeagues();if(view==='home'){renderHome();return}if(view===
  const search=$('search').value.toLowerCase(),set=games.filter(g=>(!league||g.league.id===league)&&(!onlyFav||favorites.has(g.fixture.id))&&(!search||(g.teams.home.name+' '+g.teams.away.name+' '+g.league.name).toLowerCase().includes(search))&&(filter==='all'||filter==='live'&&live(g)||filter==='upcoming'&&g.fixture.status.short==='NS'||filter==='finished'&&finished(g)));
  if(!set.length){$('content').innerHTML='<div class="empty"><strong>Keine Begegnungen in dieser Auswahl</strong>'+(sport==='del'?'Wähle einen anderen DEL-Spieltag.':'Anderen Tag, Wettbewerb oder Filter wählen.')+'</div>';return}
  const groups=new Map();for(const g of set){const k=g.league.id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(g)}
- $('content').innerHTML=[...groups.values()].map(list=>`<div class="league-head">${esc(list[0].league.country||'International')} <span> / </span>${esc(list[0].league.name)}<button data-table="${list[0].league.id}">Tabelle →</button></div>${list.map(g=>{const odds=scheduleOddsSlot(g);return `<div class="match${odds?' has-schedule-odds':''}"><button class="star ${favorites.has(g.fixture.id)?'saved':''}" data-fav="${g.fixture.id}" aria-label="Favorit ${esc(g.teams.home.name)}" aria-pressed="${favorites.has(g.fixture.id)}">${favorites.has(g.fixture.id)?'★':'☆'}</button><span data-list-clock="${g.fixture.id}" class="clock ${live(g)?'live':''}">${live(g)?esc(matchClockLabel(g,true)):finished(g)?'Beendet':time(g.fixture.date)}<br>${live(g)?'● LIVE':esc(g.fixture.status.short==='NS'?'':g.fixture.status.short)}</span><button class="teams" data-match="${g.fixture.id}"><span class="team">${crest(g.teams.home)}${esc(g.teams.home.name)}</span><span class="team">${crest(g.teams.away)}${esc(g.teams.away.name)}</span></button><div class="scores ${live(g)?'live':''}">${fmt(g.goals.home)}<br>${fmt(g.goals.away)}</div><span class="arrow">›</span>${odds}</div>`}).join('')}`).join('');loadScheduleOdds($('content'))}
+ const columns='<div class="schedule-columns"><span class="odds-heading" aria-label="Quoten"><span>1</span><span>X</span><span>2</span></span><span class="score-heading">Stand</span></div>';
+ $('content').innerHTML=[...groups.values()].map(list=>`<div class="league-head">${esc(list[0].league.country||'International')} <span> / </span>${esc(list[0].league.name)}<button data-table="${list[0].league.id}">Tabelle →</button></div>${columns}${list.map(scheduleMatchRow).join('')}`).join('');
+ loadScheduleOdds($('content'));
+}
+function scheduleMatchRow(game){
+ const {fixture,teams,goals}=game;
+ const isLive=live(game),isFinished=finished(game),saved=favorites.has(fixture.id);
+ const day=new Date(fixture.date).toLocaleDateString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit'});
+ return `<div class="match schedule-match">
+  <button class="star ${saved?'saved':''}" data-fav="${fixture.id}" aria-label="Favorit ${esc(teams.home.name)}" aria-pressed="${saved}">${saved?'★':'☆'}</button>
+  <span data-list-clock="${fixture.id}" class="clock ${isLive?'live':''}">${isLive?esc(matchClockLabel(game,true))+'<br>● LIVE':`<time datetime="${esc(fixture.date)}">${time(fixture.date)}</time><small>${esc(isFinished?'Beendet':fixture.status.short==='NS'?day:fixture.status.short)}</small>`}</span>
+  <button class="teams" data-match="${fixture.id}"><span class="team">${crest(teams.home)}${esc(teams.home.name)}</span><span class="team">${crest(teams.away)}${esc(teams.away.name)}</span></button>
+  ${scheduleOddsSlot(game)}
+  <div class="scores ${isLive?'live':''}" aria-label="${isLive?'Live-Stand':isFinished?'Endstand':'Spielstand'}"><span>${fmt(goals.home)}</span><span>${fmt(goals.away)}</span></div>
+ </div>`;
+}
+
 async function load(){const n=++request;++comboToken;++drawToken;$('drawGenerate').disabled=false;$('drawResult').innerHTML='';$('comboResult').innerHTML='';$('generate').disabled=false;$('content').innerHTML='<div class="loading">Spieltag wird geladen …</div>';$('connection').textContent='Daten werden geladen';try{if(demoMode){games=demoGames();$('mode').classList.remove('hidden');$('mode').innerHTML='DEMO · Alle Ergebnisse und Spieler sind Beispieldaten.<button id="exitDemo">Echte Daten laden</button>';$('connection').textContent='Demo · keine Live-Daten'}else{const d=sport==='del'?await get({action:'del',date:$('date').value}):await get({action:'fixtures',date:$('date').value});if(n!==request)return;if(sport==='del'){fixtureState={configured:d.configured,updatedAt:d.updatedAt};games=(d.games||[]).map(g=>({fixture:{id:g.id,date:g.date,status:{short:['FT','AOT','AP'].includes(g.status)?'FT':['NS','TBD'].includes(g.status)?'NS':g.status,elapsed:null}},league:{id:10001,name:'DEL',country:'Deutschland'},teams:{home:{id:0,name:g.home,logo:g.homeLogo},away:{id:0,name:g.away,logo:g.awayLogo}},goals:{home:g.homeGoals,away:g.awayGoals},sport:'del',official:g.official,officialUrl:g.officialUrl}));$('connection').textContent=d.notice||d.source||'DEL';if(d.notice||!d.configured||!games.length){$('mode').classList.remove('hidden');$('mode').textContent=d.notice||'Für dieses Datum sind keine DEL-Spiele angesetzt.';
  if(d.nextDate){const button=document.createElement('button');button.type='button';button.className='pill';button.dataset.delDate=d.nextDate;button.textContent='Zum nächsten DEL-Spieltag · '+d.nextDate.split('-').reverse().join('.');$('mode').append(' ',button);}}else $('mode').classList.add('hidden')}else{fixtureState={configured:d.configured,updatedAt:d.updatedAt};games=(d.data||[]).filter(g=>sport==='nhl'||isScorerCompetition(g.league));if(!d.configured){$('mode').classList.remove('hidden');$('mode').textContent=d.notice}else $('mode').classList.add('hidden');$('connection').textContent=d.configured?(sport==='nhl'?'NHL · 60 Sek. Aktualisierung':'API-Sports · 60 Sek. Aktualisierung'):'Datenzugang fehlt'}$('updated').textContent=d.updatedAt?'Abruf: '+new Date(d.updatedAt).toLocaleTimeString('de-DE')+' · Berlin':'Europe/Berlin'}savedFavoriteGames();refreshFavoriteMatches();render();renderFocus();syncFavoritePush();if(notificationMatch){const id=notificationMatch;notificationMatch=null;if(games.some(g=>Number(g.fixture.id)===id))openMatch(id)}if(!demoMode&&sport==='football'&&!catalogLoaded)loadCatalog()}catch(e){if(n!==request)return;games=[];fixtureState={configured:false,updatedAt:null};$('connection').textContent='Datenabruf fehlgeschlagen';const message='Bitte die Verbindung prüfen und erneut laden. Technischer Fehler: '+esc(String(e?.message||'Unbekannt').slice(0,140));const retry='<button class="secondary" id="retry" style="margin-top:15px">Erneut versuchen</button>';$('content').innerHTML='<div class="empty"><strong>Verbindung derzeit nicht verfügbar</strong>'+message+'<br>'+retry+'</div>';if(view==='home'){dashboard({error:true});$('homeSubtitle').textContent='Spieltag konnte nicht abgerufen werden';$('homePlayers').innerHTML='<div class="empty card"><strong>Keine Live-Daten verfügbar</strong><p>'+message+'</p>'+retry+'</div>'}}}
 function demoGames(){if(sport==='nhl')return [['Edmonton Oilers','Toronto Maple Leafs'],['Florida Panthers','Boston Bruins'],['New York Rangers','Colorado Avalanche']].map(([h,a],i)=>({fixture:{id:8000+i,date:$('date').value+'T20:30:00Z',status:{short:'NS'},venue:{name:'Demo-Arena'}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:2026},teams:{home:{id:200+i*2,name:h,abbrev:['EDM','FLA','NYR'][i]},away:{id:201+i*2,name:a,abbrev:['TOR','BOS','COL'][i]}},goals:{home:null,away:null},sport:'nhl'}));const pairs=[['Bayern München','Borussia Dortmund',78],['Bayer Leverkusen','Eintracht Frankfurt',78],['RB Leipzig','VfB Stuttgart',78],['Arsenal','Chelsea',39],['Manchester City','Liverpool',39],['Real Madrid','FC Barcelona',140],['Inter','Juventus',135],['Paris Saint-Germain','Olympique Lyon',61],['SC Freiburg','Werder Bremen',78],['Atalanta','SSC Napoli',135],['FC Porto','Benfica',94],['Ajax','PSV Eindhoven',88]];return pairs.map(([h,a,l],i)=>({fixture:{id:9000+i,date:$('date').value+'T'+String(15+Math.floor(i/3)).padStart(2,'0')+':30:00+02:00',status:{short:i===0?'2H':i===1?'FT':'NS',elapsed:i===0?67:null},venue:{name:'Demo-Stadion'}},league:{id:l,name:leagueList.find(x=>x[0]===l)?.[2]||'Europa League',country:({78:'Germany',39:'England',140:'Spain',135:'Italy',61:'France',94:'Portugal',88:'Netherlands'})[l],season:2026},teams:{home:{id:100+i*2,name:h},away:{id:101+i*2,name:a}},goals:{home:i===0?2:i===1?1:null,away:i===0?1:i===1?1:null}}))}
@@ -741,10 +775,13 @@ function tipQuoteSlot(game,sport,market,selection){
  return '<span class="summary-odds" data-tip-quote="'+esc(query)+'">Quote: –</span>';
 }
 function scheduleOddsSlot(game){
- if(game.fixture.status.short!=='NS'||!(Date.parse(game.fixture.date)>Date.now()))return '';
  const sp=game.sport||sport;
+ const archived=sp==='football'&&finished(game);
+ const upcoming=game.fixture.status.short==='NS'&&Date.parse(game.fixture.date)>Date.now();
  const query=new URLSearchParams({home:game.teams.home.name,away:game.teams.away.name,start:game.fixture.date,market:'result',selection:'all',sport:sp});
- return '<span class="schedule-odds" data-tip-quote="'+esc(query.toString())+'"'+(sp==='football'?'':' data-hockey="1"')+' role="group" aria-label="Quoten für 1, X und 2">'+[['1','home'],['X','draw'],['2','away']].map(([label,side])=>'<span data-odds-side="'+side+'" aria-label="'+label+' nicht verfügbar">–</span>').join('')+'</span>';
+ if(archived)query.set('archive','1');
+ const attrs=!demoMode&&(upcoming||archived)?' data-tip-quote="'+esc(query.toString())+'"':'';
+ return '<span class="schedule-odds"'+attrs+(sp==='football'?'':' data-hockey="1"')+' role="group" aria-label="'+(archived?'Archivquoten':'Quoten')+' für 1, X und 2">'+[['1','home'],['X','draw'],['2','away']].map(([label,side])=>'<span data-odds-side="'+side+'" aria-label="'+label+' nicht verfügbar">–</span>').join('')+'</span>';
 }
 let scheduleOddsObserver;
 function loadScheduleOdds(container){
@@ -757,7 +794,7 @@ function loadScheduleOdds(container){
    renderTipQuotes(entry.target);
   }
  },{rootMargin:'120px'});
- container.querySelectorAll('.schedule-odds').forEach(slot=>scheduleOddsObserver.observe(slot.closest('.match')));
+ container.querySelectorAll('.schedule-odds[data-tip-quote]').forEach(slot=>scheduleOddsObserver.observe(slot.closest('.match')));
 }
 function loadTipQuote(query){
  if(pendingTipQuotes.has(query))return pendingTipQuotes.get(query);
@@ -793,7 +830,7 @@ async function renderTipQuotes(container){
    }else{
     slot.textContent='Quote: '+({not_configured:'Anbieterzugang fehlt',provider_unavailable:'Abruf fehlgeschlagen',no_fixture:'Spiel nicht zugeordnet'}[result.status]||'nicht verfügbar');
    }
-   slot.title=(quote?.bookmaker||result.source||'Buchmacherquote')+(quote?.updatedAt?' · Stand '+new Date(quote.updatedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}):'')+(schedule&&slot.dataset.hockey?' · Reguläre Spielzeit (60 Minuten)':'');
+   slot.title=(result.archived?'Archivquote · ':'')+(quote?.bookmaker||result.source||'Buchmacherquote')+(quote?.updatedAt?' · Stand '+new Date(quote.updatedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}):'')+(schedule&&slot.dataset.hockey?' · Reguläre Spielzeit (60 Minuten)':'');
   }
  }));
 }
