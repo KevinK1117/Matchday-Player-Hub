@@ -1,3 +1,4 @@
+import {officialDelDay} from '../lib/del-schedule.js';
 import {analyzeNhlDraws} from '../lib/nhl-draws.js';
 import {recentScorerForm} from '../lib/scorer-analysis.js';
 import {nhlTeamHistory} from '../lib/player-history.js';
@@ -106,15 +107,19 @@ export default async function handler(req,res){
  }
  if(a==='del'){
   const key=process.env.API_HOCKEY_KEY||process.env.API_SPORTS_KEY;
-  if(!key)return res.status(200).json({configured:false,games:[],notice:'API-Hockey-Zugang fehlt'});
-  const root='https://v1.hockey.api-sports.io';
-  const call=async path=>{const response=await fetch(root+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Hockey HTTP '+response.status);const body=await response.json();if(body.errors&&Object.keys(body.errors).length)throw Error('API-Hockey meldet: '+JSON.stringify(body.errors).slice(0,180));return body.response||[]};
-  const leagues=await call('/leagues?search=DEL');
-  const league=leagues.find(l=>/^DEL$/i.test(String(l.name||'')));
-  if(!league)return res.status(200).json({configured:true,games:[],notice:'DEL-Liga nicht gefunden'});
-  const season=Number(String(q.date).slice(0,4))-(Number(String(q.date).slice(5,7))<7?1:0);
-  const games=await call('/games?date='+encodeURIComponent(q.date)+'&league='+league.id+'&season='+season);
-  return res.status(200).json({configured:true,games:games.map(g=>({id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS'})),source:'API-Hockey'});
+  if(!key)return res.status(200).json(await officialDelDay(String(q.date)));
+  try{
+   const root='https://v1.hockey.api-sports.io';
+   const call=async path=>{const response=await fetch(root+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Hockey HTTP '+response.status);const body=await response.json();if(body.errors&&Object.keys(body.errors).length)throw Error('API-Hockey meldet: '+JSON.stringify(body.errors).slice(0,180));return body.response||[]};
+   const leagues=await call('/leagues?search=DEL');
+   const league=leagues.find(l=>/^DEL$/i.test(String(l.name||'')));
+   if(!league)throw Error('DEL-Liga nicht gefunden');
+   const season=Number(String(q.date).slice(0,4))-(Number(String(q.date).slice(5,7))<7?1:0);
+   const games=await call('/games?date='+encodeURIComponent(q.date)+'&league='+league.id+'&season='+season+'&timezone=Europe%2FBerlin');
+   return res.status(200).json({configured:true,games:games.map(g=>({id:g.id,date:g.date,home:g.teams?.home?.name||'Heimteam',away:g.teams?.away?.name||'Gastteam',homeLogo:g.teams?.home?.logo||null,awayLogo:g.teams?.away?.logo||null,homeGoals:g.scores?.home??null,awayGoals:g.scores?.away??null,status:g.status?.short||'NS'})),source:'API-Hockey',updatedAt:new Date().toISOString()});
+  }catch{
+   return res.status(200).json(await officialDelDay(String(q.date)));
+  }
  }
  if(a==='fixtures'){data=(await fetchBerlinSchedule(String(q.date))).games.map(normalizeGame)}
  if(a==='draws'){
@@ -186,6 +191,6 @@ export default async function handler(req,res){
  data={fixture:g,box,standings:standings.standings||[],nhlStats:stats,nhlEvents:events,homeRecent:{...home,data:home.data.slice(0,10)},awayRecent:{...away,data:away.data.slice(0,10)},h2h:{data:home.data.filter(x=>x.teams.home.abbrev===g.teams.away.abbrev||x.teams.away.abbrev===g.teams.away.abbrev).slice(0,10)},stats:{data:[]},table:{data:[]},events:{data:[]},lineups:{data:[]}};
  }
  return res.status(200).json({configured:true,data,source:'NHL',updatedAt:new Date().toISOString()});
- }catch(e){if(a==='del')return res.status(502).json({error:'DEL-Datenabruf fehlgeschlagen',detail:String(e?.message||e).slice(0,160),hint:'API-Hockey-Zugang, Tarif oder DEL-Endpunkt prüfen'});return res.status(502).json({error:'NHL-Daten derzeit nicht verfügbar. Bitte später erneut versuchen.'})}
+ }catch(e){if(a==='del')return res.status(502).json({error:'DEL-Datenabruf fehlgeschlagen',detail:'API-Hockey und offizieller DEL-Spielplan haben keine verwertbaren Daten geliefert.'});return res.status(502).json({error:'NHL-Daten derzeit nicht verfügbar. Bitte später erneut versuchen.'})}
 }
 
