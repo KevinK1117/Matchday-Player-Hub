@@ -372,6 +372,8 @@ body[data-view="combo"] #combo-card .combo-body,body[data-view="combo"] #combo-c
 :is(#homePlayers,#comboResult,#favoriteContent,#drawResult,#liveResult) .player-summary-card .home-player-metrics small{display:none!important}
 :is(#homePlayers,#comboResult,#favoriteContent,#drawResult,#liveResult) .player-summary-card .home-player-foot{min-height:0!important;gap:8px!important}
 :is(#homePlayers,#comboResult,#favoriteContent,#drawResult,#liveResult) .player-summary-card .home-player-foot>span{font-size:10px!important;line-height:1.35!important;display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden!important}
+:is(#comboResult,#drawResult,#liveResult) .player-summary-card:has(.summary-odds){height:auto!important;grid-template-rows:minmax(128px,auto) 58px auto!important}
+.player-summary-card .summary-odds{display:block;font-size:11px;line-height:1.3;margin-top:4px;color:var(--ink);overflow-wrap:anywhere}
 .player-summary-card .summary-kickoff{color:var(--green);font-weight:700;white-space:nowrap}
 .player-summary-card .summary-profile-link{background:transparent;border:0;color:var(--green);font-size:11px;padding:4px 0;flex-shrink:0}
 
@@ -677,11 +679,46 @@ function scorerKeyMetrics(p,nhl){
  return '<div class="home-player-metrics scorer-key-metrics">'+html+'</div>';
 }
 function scorerProfileDetails(id,nhl){const p=scorerProfiles.get((nhl?'nhl:':'football:')+id);if(!p)return '';if(!nhl)return '<div class="section-label">Analyse dieser Begegnung</div>'+profileMetrics([['Gegner · Gegentore / Spiel',p.opponentGoalsAgainstPerGame],['Schussquote',shotConversion(p,false)],['Ø Minuten',p.minutesPerGame],['xG / 90',p.xG90],['Tore · jüngste Spiele',p.recent3Goals],['Spiele · jüngste Form',p.recent3Games]])+(p.comboAnalysis?'<p class="muted">Fußball-Kombi: Saison-Schüsse aufs Tor / 90 × geschätzte Einsatzminuten / 90 × geglättete Trefferquote. Die Trefferquote verwendet Saisontore und Schüsse aufs Tor mit 20 Basisschüssen bei 25 % und höchstens 60 % Abschlussquote. Einsatzminuten stammen aus einer Zusatzquelle oder dem Saisonschnitt (maximal 90). Prozent = 100 × (1 − exp(−Torrate)). Unkalibrierte Schätzung bei Einsatz; eine Startelfbestätigung bleibt gesondert erforderlich.</p>':'');return '<div class="section-label">Analyse dieser Begegnung</div>'+profileMetrics([['Gegner · Gegentore / Spiel',p.opponentGoalsAgainstPerGame!=null?Number(p.opponentGoalsAgainstPerGame).toFixed(2):null],['Powerplay-Tore',p.ppgoals],['Schussquote',shotConversion(p,nhl)],['Ø Eiszeit · letzte 5',p.toiLast5!=null?(p.toiLast5/60).toFixed(1)+' Min.':null],['Ø PP-Eiszeit · letzte 5',p.ppToiLast5!=null?(p.ppToiLast5/60).toFixed(1)+' Min.':null],['Schüsse · letzte 10',p.last10Shots],['Kaderabgleich',p.rosterMismatch?'Widerspruch':p.rosterChecked?'Aktuelles NHL-Team geprüft':'Nicht verfügbar'],['Einsatz',p.participation],['Torhüter · bestätigter Starter','Nicht verfügbar'],['xG / Spiel',p.xGPerGame],['iHDCF / Spiel',p.highDangerChancesPerGame]])+(p.statisticsSource?'<p class="muted">'+esc(p.statisticsSource)+'</p>':'')+(p.externalOpponentForm?'<p class="muted">Zusatzform Gegner: '+esc(p.externalOpponentForm.sources.join(', '))+' · '+esc(p.externalOpponentForm.played)+' Spiele</p>':'')+'<p class="muted">'+(p.comboAnalysis?'Kombi-Modell: Schüsse/Spiel zu 70 % Saison und zu 30 % letzte zehn Spiele gemittelt. Die Trefferquote aus Saisontoren und Schüssen wird mit 100 Basisschüssen bei 10 % geglättet und auf höchstens 20 % begrenzt. Torrate = gemittelte Schüsse × geglättete Trefferquote. Prozent = 100 × (1 − exp(−Torrate)), bei Einsatz. Weitere Profilwerte verändern diese Kombi-Auswahl nicht.':'Schussquote mit bis zu drei Vorsaisons geglättet (sonst 10-%-Basis); jüngste Form bis zu zehn Spiele. Vorhandenes Anbieter-xG fließt zu 25 % in die Torrate ein.')+' Die Torwahrscheinlichkeit ist eine unkalibrierte Modellschätzung. Fehlende xG-, Torchancen- und Torhüterdaten werden nicht geschätzt.</p>';}
+const pendingTipQuotes=new Map();
+function tipQuoteSlot(game,sport,market,selection){
+ if(sport==='nhl'||sport==='del')return '<span class="summary-odds">Quote: kein Sportmonks-Feed</span>';
+ const home=game.teams?.home?.name,away=game.teams?.away?.name,start=game.fixture?.date;
+ const query=home&&away&&start&&selection!=null?new URLSearchParams({home,away,start,market,selection}).toString():'';
+ return '<span class="summary-odds" data-tip-quote="'+esc(query)+'">Quote: –</span>';
+}
+function loadTipQuote(query){
+ if(pendingTipQuotes.has(query))return pendingTipQuotes.get(query);
+ const work=fetch('/api/odds?'+query,{signal:requestTimeout(22000)})
+  .then(async response=>response.ok?await response.json():{status:'provider_unavailable'})
+  .catch(()=>({status:'provider_unavailable'}))
+  .finally(()=>pendingTipQuotes.delete(query));
+ pendingTipQuotes.set(query,work);
+ return work;
+}
+async function renderTipQuotes(container){
+ const slots=[...container.querySelectorAll('[data-tip-quote]')];
+ let next=0;
+ await Promise.all(Array.from({length:Math.min(4,slots.length)},async()=>{
+  while(next<slots.length){
+   const slot=slots[next++];
+   if(!slot.isConnected)continue;
+   const result=slot.dataset.tipQuote?await loadTipQuote(slot.dataset.tipQuote):{status:'no_fixture'};
+   if(!slot.isConnected)continue;
+   const quote=result.quote;
+   if(quote&&Number.isFinite(quote.price)&&quote.price>1){
+    slot.textContent='Quote '+quote.price.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:3})+' · '+quote.bookmaker;
+    slot.title='Sportmonks'+(quote.updatedAt?' · Stand '+new Date(quote.updatedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}):'');
+   }else{
+    slot.textContent='Quote: '+({not_configured:'Sportmonks-Zugang fehlt',provider_unavailable:'Abruf fehlgeschlagen',no_fixture:'Spiel nicht zugeordnet'}[result.status]||'nicht verfügbar');
+   }
+  }
+ }));
+}
 function renderScorerSelection(selection,currentSport){
  const rows=selection.picks;
  if(!rows.length){$('comboResult').innerHTML='<p class="result-status">Keine Spieler erfüllen die Analysefilter. '+($('confirmedOnly').checked?'Bestätigte Aufstellungen sind möglicherweise noch nicht veröffentlicht.':'Anderen Spieltag wählen oder Datenabdeckung prüfen.')+'</p>';return}
- $('comboResult').innerHTML=`<p class="result-status">${rows.length} Spieler ${selection.complete?'ausgewählt':'verfügbar'}. Statistische Auswahl ohne Quoten.</p><div class="scorer-grid">${rows.map((pick,i)=>{const p=pick.player,g=pick.game,nhl=currentSport==='nhl';scorerProfiles.set((nhl?'nhl:':'football:')+p.id,p);const chance=scorerChance(p,nhl),match=g.teams.home.name+' – '+g.teams.away.name,meta=p.team+' · '+g.league.name;return `<article class="home-player-card player-summary-card"><div class="home-player-top"><span class="rank-number">${i+1}</span><button class="home-profile" data-player="${p.id}" data-season="${g.league.season}" title="${esc(p.name)} · Profil und Statistiken">${portrait(p.id,nhl,p.photo||p.headshot,p.team,g.league.season)}<span><strong>${esc(p.name)}</strong>${positionBadge(p,nhl,true)}<small class="summary-match" title="${esc(meta)}">${esc(meta)}</small><small class="summary-match" title="${esc(match)}">${esc(match)}</small>${!nhl&&p.h2h?.played?'<small class="summary-match">H2H (Heim/Remis/Gast) · '+p.h2h.homeWins+'/'+p.h2h.draws+'/'+p.h2h.awayWins+'</small>':''}${summaryKickoff(g)}</span></button><div class="goal-badge"><strong>${chance!=null?chance.toFixed(1)+' %':'– %'}</strong><span>${p.comboAnalysis?.version==='recent-form-v1'?'Trefferhäufigkeit · Form':'Modell · unkalibriert'}</span></div></div>${scorerKeyMetrics(p,nhl)}<div class="home-player-foot"><span title="${esc(p.statisticsSource||'')}"><strong>${esc(scorerStatus(p,nhl))}</strong>${p.statisticsSource?' · '+esc(p.statisticsSource):''}</span><button class="summary-profile-link" data-player="${p.id}" data-season="${g.league.season}">Profil &amp; Statistiken →</button></div></article>`}).join('')}</div>`+'<p class="notice">Statistische Auswahl ohne Wettquoten. '+(currentSport==='football'?'Bei belegtem H2H-Vorsprung kommen nur Spieler des stärkeren Teams infrage. Bei Gleichstand oder fehlendem Vergleich zählt die Form beider Teams. Prozentwert beschreibt vergangene Trefferhäufigkeit, keine kommende Trefferchance.':'')+'</p>';
-
+ $('comboResult').innerHTML=`<p class="result-status">${rows.length} Spieler ${selection.complete?'ausgewählt':'verfügbar'}. Statistische Auswahl ohne Quoten.</p><div class="scorer-grid">${rows.map((pick,i)=>{const p=pick.player,g=pick.game,nhl=currentSport==='nhl';scorerProfiles.set((nhl?'nhl:':'football:')+p.id,p);const chance=scorerChance(p,nhl),match=g.teams.home.name+' – '+g.teams.away.name,meta=p.team+' · '+g.league.name;return `<article class="home-player-card player-summary-card"><div class="home-player-top"><span class="rank-number">${i+1}</span><button class="home-profile" data-player="${p.id}" data-season="${g.league.season}" title="${esc(p.name)} · Profil und Statistiken">${portrait(p.id,nhl,p.photo||p.headshot,p.team,g.league.season)}<span><strong>${esc(p.name)}</strong>${positionBadge(p,nhl,true)}<small class="summary-match" title="${esc(meta)}">${esc(meta)}</small><small class="summary-match" title="${esc(match)}">${esc(match)}</small>${!nhl&&p.h2h?.played?'<small class="summary-match">H2H (Heim/Remis/Gast) · '+p.h2h.homeWins+'/'+p.h2h.draws+'/'+p.h2h.awayWins+'</small>':''}${summaryKickoff(g)}${tipQuoteSlot(g,currentSport,'scorer',p.name)}</span></button><div class="goal-badge"><strong>${chance!=null?chance.toFixed(1)+' %':'– %'}</strong><span>${p.comboAnalysis?.version==='recent-form-v1'?'Trefferhäufigkeit · Form':'Modell · unkalibriert'}</span></div></div>${scorerKeyMetrics(p,nhl)}<div class="home-player-foot"><span title="${esc(p.statisticsSource||'')}"><strong>${esc(scorerStatus(p,nhl))}</strong>${p.statisticsSource?' · '+esc(p.statisticsSource):''}</span><button class="summary-profile-link" data-player="${p.id}" data-season="${g.league.season}">Profil &amp; Statistiken →</button></div></article>`}).join('')}</div>`+'<p class="notice">Statistische Auswahl ohne Wettquoten. '+(currentSport==='football'?'Bei belegtem H2H-Vorsprung kommen nur Spieler des stärkeren Teams infrage. Bei Gleichstand oder fehlendem Vergleich zählt die Form beider Teams. Prozentwert beschreibt vergangene Trefferhäufigkeit, keine kommende Trefferchance.':'')+'</p>';
+ renderTipQuotes($('comboResult'));
 }
 
 let liveBusy=false,liveLast=0;
@@ -696,13 +733,13 @@ function liveAnalysis(detail){
  const quality=(shots!==null?1:0)+(attempts!==null?1:0)+(expected!==null?1:0),pressure=(shots!==null&&shots>=5)||(expected!==null&&expected>=1.4)||(attempts!==null&&attempts>=12);
  return {label:quality<2?'Datenlage begrenzt':pressure?'Erhöhte Toraktivität':'Geringe Toraktivität',reason:parts.length?parts.join(' · '):'Live-Statistiken nicht verfügbar',quality,pressure};
 }
-function tipSummaryHeader({index,match,market,league,game,chance,label}){
- return `<div class="home-player-top"><span class="rank-number">${index+1}</span><div class="home-profile"><span><strong class="summary-wager" title="${esc(market)}">${esc(market)}</strong><span class="summary-fixture" title="${esc(match)}">${esc(match)}</span><small class="summary-match" title="${esc(league||'')}">${esc(league||'Liga')}</small>${summaryKickoff(game)}</span></div><div class="goal-badge"><strong>${esc(chance)}</strong><span>${esc(label)}</span></div></div>`;
+function tipSummaryHeader({index,match,market,league,game,chance,label,quote}){
+ return `<div class="home-player-top"><span class="rank-number">${index+1}</span><div class="home-profile"><span><strong class="summary-wager" title="${esc(market)}">${esc(market)}</strong><span class="summary-fixture" title="${esc(match)}">${esc(match)}</span><small class="summary-match" title="${esc(league||'')}">${esc(league||'Liga')}</small>${summaryKickoff(game)}${quote}</span></div><div class="goal-badge"><strong>${esc(chance)}</strong><span>${esc(label)}</span></div></div>`;
 }
 function liveTipCard(x,i,key,expanded){
  const g=x.g,match=g.teams.home.name+' – '+g.teams.away.name,hasQuote=Number(x.liveOdd?.odd)>1,chance=x.form?(x.form.score*100).toFixed(0)+' %':'– %',score=g.goals?.home!=null&&g.goals?.away!=null?g.goals.home+' : '+g.goals.away:'–',phase=matchClockLabel(g)||'Spielzeit nicht verfügbar';
  return `<article class="home-player-card player-summary-card tip-summary-card">
- ${tipSummaryHeader({index:i,match,market:x.tip,league:g.league?.name,game:g,chance,label:'Torhäufigkeit · Form'})}
+ ${tipSummaryHeader({index:i,match,market:x.tip,league:g.league?.name,game:g,chance,label:'Torhäufigkeit · Form',quote:tipQuoteSlot(g,x.sport,x.tip.includes('1. Halbzeit')?'first-half-over':'full-time-over',Number(g.goals.home)+Number(g.goals.away)+0.5)})}
  <div class="home-player-metrics"><div><span>Live-Spielstand</span><b>${esc(score)}</b></div><div><span>Spielzeit</span><b>${esc(phase)}</b></div><div><span>Traf · letzte Spiele H/G</span><b>${x.form?x.form.home.scoringGames+'/'+x.form.home.sample+' · '+x.form.away.scoringGames+'/'+x.form.away.sample:'–'}</b></div></div>
  <details class="tip-summary-details" data-live-fixture="${esc(key)}"${expanded?' open':''}><summary>Statistik &amp; Begründung</summary><p>● LIVE-FORM · ${esc(phase)}</p><p>${esc(x.form?.reason||'Formdaten fehlen')}</p>${x.analysis?'<div class="live-evidence"><strong>'+esc(x.signal)+' · '+esc(x.analysis.label)+'</strong><span>'+esc(x.analysis.reason)+'</span></div>':''}<p>${esc(x.reason)}</p><p>Historische Torhäufigkeit beider Teams, keine Wahrscheinlichkeit für diesen Live-Tipp. Auswahl ohne Wettquoten.</p>${tipCompetition(g.league)}${bet365FixtureLink(match)}<p>Kein verifizierter Direktlink zum Einzelspiel · Heuristische Live-Einschätzung · unkalibriert · keine Gewinnzusage</p></details></article>`;
 }
@@ -755,7 +792,7 @@ async function liveCombo(force=false){
      }
     }catch{}
    }
-   return {...x,key,form,analysis:null,liveOdd:null};
+   return {...x,key,sport:kind,form,analysis:null,liveOdd:null};
   }));
   if(kind!==$('liveSport').value||date!==$('date').value)return;
   for(let i=selected.length-1;i>=0;i--)if(!selected[i].form)selected.splice(i,1);
@@ -770,6 +807,7 @@ async function liveCombo(force=false){
   $('liveMeta').textContent=(kind==='nhl'?'NHL':'API-Sports')+' · Datenabruf '+new Date().toLocaleTimeString('de-DE')+' · '+active.length+' laufende Spiele · '+selected.filter(x=>x.tip).length+' Hinweise';
   const expanded=new Set([...$('liveResult').querySelectorAll('details[data-live-fixture][open]')].map(el=>el.dataset.liveFixture));
   $('liveResult').innerHTML=selected.length?'<div class="live-combo-grid">'+selected.map((x,i)=>liveTipCard(x,i,x.key,expanded.has(x.key))).join('')+'</div>':'<p class="result-status">Keine passenden Live-Torsignale verfügbar. Es werden keine Tipps erfunden.</p>';
+  renderTipQuotes($('liveResult'));
  }catch(e){if(kind!==$('liveSport').value||date!==$('date').value)return;$('liveMeta').textContent='Live-Abfrage fehlgeschlagen';$('liveResult').innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
  finally{liveBusy=false}
 }
@@ -956,14 +994,16 @@ function drawPickCard(p,i,isProvisional=false){
  if(p.sport==='nhl'){
   const h=p.homeForm,a=p.awayForm;
   return `<article class="home-player-card player-summary-card tip-summary-card draw-summary-card">
-  ${tipSummaryHeader({index:i,match:p.match,market:'Remis nach 60 Minuten',league:'NHL',game:{fixture:{date:p.kickoff}},chance:drawMetricNumber(p.score,1)+' %',label:'Remisquote · direkte Duelle'})}
+  ${tipSummaryHeader({index:i,match:p.match,market:'Remis nach 60 Minuten',league:'NHL',game:{fixture:{date:p.kickoff}},chance:drawMetricNumber(p.score,1)+' %',label:'Remisquote · direkte Duelle',quote:tipQuoteSlot(null,'nhl')})}
   <div class="home-player-metrics"><div><span>Remis · Heimteam</span><b>${h.draws} / ${h.played}</b></div><div><span>Remis · Gastteam</span><b>${a.draws} / ${a.played}</b></div><div><span>Remis · direkte Duelle</span><b>${fmt(p.h2h?.draws)} / ${fmt(p.h2h?.played)}</b></div></div>
   <details class="tip-summary-details"><summary>Statistik &amp; Begründung</summary><p>Die Quote zeigt, wie viele direkte Duelle nach 60 Minuten unentschieden standen. Spiele mit Verlängerung oder Shootout zählen als Remis nach regulärer Spielzeit. Die Quote beschreibt vergangene Spiele.</p></details></article>`;
  }
 
+ const [home,away]=p.match.split(' – ');
+ const game={fixture:{date:p.kickoff},teams:{home:{name:home},away:{name:away}}};
  const draw=p.type==='Unentschieden',pick=draw?'Remis nach 90 Minuten':String(p.team||'').replace(/^[12]\s*[·.-]\s*/,''),chance=p.modelProbability!=null?Number(p.modelProbability).toFixed(1)+' %':'– %';
  return `<article class="home-player-card player-summary-card tip-summary-card draw-summary-card ${isProvisional?'is-provisional':''}">
- ${tipSummaryHeader({index:i,match:p.match,market:p.type+(draw?'':(' · '+pick)),league:p.league,game:{fixture:{date:p.kickoff}},chance,label:'Modell · unkalibriert'})}
+ ${tipSummaryHeader({index:i,match:p.match,market:p.type+(draw?'':(' · '+pick)),league:p.league,game,chance,label:'Modell · unkalibriert',quote:tipQuoteSlot(game,'football','result',draw?'draw':/^1\s/.test(p.team)?'home':/^2\s/.test(p.team)?'away':null)})}
  <div class="home-player-metrics"><div><span>Form · Tore/Gegentore H/G</span><b>${p.homeForm&&p.awayForm?drawMetricNumber(p.homeForm.scored,1)+'/'+drawMetricNumber(p.homeForm.conceded,1)+' · '+drawMetricNumber(p.awayForm.scored,1)+'/'+drawMetricNumber(p.awayForm.conceded,1):'–'}</b></div><div><span>Form · Punkte/Spiel H/G</span><b>${drawMetricNumber(p.homeForm?.played?p.homeForm.points/p.homeForm.played:null,2)} / ${drawMetricNumber(p.awayForm?.played?p.awayForm.points/p.awayForm.played:null,2)}</b></div><div><span>Spiele mit Tor · H/G</span><b>${fmt(p.homeForm?.scoringGames)}/${fmt(p.homeForm?.played)} · ${fmt(p.awayForm?.scoringGames)}/${fmt(p.awayForm?.played)}</b></div></div>
  <details class="tip-summary-details"><summary>Statistik &amp; Begründung</summary><p>H/G = Heimteam/Gastteam. Alle Formwerte beziehen sich auf die letzten 5–10 Spiele insgesamt. Basis: ${fmt(p.homeForm?.homePlayed)} Spiele / ${fmt(p.awayForm?.awayPlayed)} Spiele. Tore und Gegentore pro Spiel in der jüngsten Gesamtform. Form = Punkte pro Spiel. Startelf: ✓ veröffentlicht, ? offen. Ausfälle: gemeldete Anzahl; Bedeutung einzelner Spieler nicht bewertet.</p><p>Tabelle: ${fmt(p.table?.home?.rank)} / ${fmt(p.table?.away?.rank)} · Letzte 5: ${fmt(p.homeForm?.last5Points)} / ${fmt(p.awayForm?.last5Points)} Punkte · H2H: ${p.h2h?.played?fmt(p.h2h.draws)+'/'+fmt(p.h2h.played):'nicht verfügbar'}</p><p>${isProvisional?'Modell · unkalibriert':'Zusätzlich geprüft · unkalibriert'} · Geschätzte Wett-Trefferchance</p><p>Form: ${p.homeForm?.played>=6&&p.awayForm?.played>=6?'vorhanden':'eingeschränkt'} · Tabelle: ${p.table?.home?.rank!=null&&p.table?.away?.rank!=null?'vorhanden':'fehlt'} · H2H: ${p.h2h?.played?'vorhanden':'fehlt'} · Ausfälle: ${p.injuriesAvailable?'abgefragt':'fehlt'} · Zusatzprognose: ${p.providerPrediction!=null?'vorhanden':'fehlt'}</p>${p.externalForm?'<p>Zusatzdaten: '+esc(p.externalForm.sources.join(', '))+' · Heim/Gast '+esc(p.externalForm.homeMatches)+'/'+esc(p.externalForm.awayMatches)+' Spiele · Ergebnisform, keine unabhängige Prognosebestätigung.</p>':''}<p>Quote des Tipps in direkten Duellen: ${drawMetricNumber(p.score,1)} % · ${esc(p.dataQuality||'Vorläufig')} · Poisson-Schätzung nicht kalibriert.</p><p>${esc(p.reason)}</p>${p.goals?.home!=null&&p.goals?.away!=null?tipLiveScore(p):''}${tipCompetition({name:p.league,country:p.country||p.leagueCountry})}${bet365FixtureLink(p.match)}</details></article>`;
 }
@@ -1000,6 +1040,7 @@ $('drawGenerate').onclick=async()=>{
   const problems=errors+(nhl?.errors||0);
   const progress=nhlDone&&(complete||stopped)?stopped||nhlError||problems?'Analyse teilweise verfügbar':'Analyse beendet':'Analyse läuft …';
   out.innerHTML=(footballError?'<p class="result-status">'+esc(footballError)+'</p>':'')+'<p class="result-status">Fußball · '+footballStatus+'<br>NHL · '+nhlStatus+'<br>'+visible.length+' passende Tipps · '+progress+(problems?' · '+problems+' Datenfehler':'')+'</p>'+visible.map((p,i)=>drawPickCard(p,i,p.dataQuality==='Vorläufig – nicht unabhängig bestätigt')).join('');
+  renderTipQuotes(out);
  };
  try{
   if(demoMode){out.textContent='Diese Analyse benötigt echte Spieldaten.';return}

@@ -15,7 +15,7 @@ test('initial transient failure retries the same batch and finishes without a fa
  const code=html.slice(start,html.indexOf('function leagueSeason',start));
  const elements={drawGenerate:{},drawResult:{innerHTML:'',insertAdjacentHTML(_,s){this.innerHTML=s+this.innerHTML}},date:{value:'2099-11-07'},drawCount:{value:'all'}};
  let calls=0;const urls=[];
- const context=vm.createContext({$:id=>elements[id],sport:'football',drawToken:0,demoMode:false,Map,Date,Number,Infinity,URLSearchParams,esc:s=>s,setTimeout:fn=>fn(),drawPickCard:()=>'',get:async()=>({data:{candidates:[],considered:0,totalFixtures:0}}),fetch:async url=>{urls.push(url);calls++;return calls===1?{ok:false,json:async()=>({error:'Temporary',retryAfter:15})}:{ok:true,json:async()=>({totalFixtures:2,considered:2,scanComplete:true,diagnostics:{},verifiedCandidates:[],provisionalCandidates:[]})}}});
+ const context=vm.createContext({renderTipQuotes:()=>{},$:id=>elements[id],sport:'football',drawToken:0,demoMode:false,Map,Date,Number,Infinity,URLSearchParams,esc:s=>s,setTimeout:fn=>fn(),drawPickCard:()=>'',get:async()=>({data:{candidates:[],considered:0,totalFixtures:0}}),fetch:async url=>{urls.push(url);calls++;return calls===1?{ok:false,json:async()=>({error:'Temporary',retryAfter:15})}:{ok:true,json:async()=>({totalFixtures:2,considered:2,scanComplete:true,diagnostics:{},verifiedCandidates:[],provisionalCandidates:[]})}}});
  vm.runInContext(code,context);await elements.drawGenerate.onclick();assert.equal(calls,2);assert.equal(urls[0],urls[1]);assert.match(elements.drawResult.innerHTML,/2 \/ 2 Spiele geprüft/);assert.match(elements.drawResult.innerHTML,/Analyse beendet/);assert.equal(elements.drawGenerate.disabled,false);
 });
 
@@ -25,7 +25,7 @@ test('the NHL tab starts a mixed scan and displays both sports even with identic
  const code=html.slice(start,html.indexOf('function leagueSeason',start));
  const elements={drawGenerate:{},drawResult:{},date:{value:'2099-11-07'},drawCount:{value:'all'}};
  const pick={fixtureId:1,kickoff:'2099-11-07T19:00:00Z',score:25};
- const context=vm.createContext({sport:'nhl',$:id=>elements[id],drawToken:0,demoMode:false,URLSearchParams,esc:s=>s,drawPickCard:p=>'<article>'+p.sport+'</article>',get:async(q,sp)=>{assert.equal(q.action,'draws');assert.equal(sp,'nhl');return {data:{candidates:[{...pick,sport:'nhl'}],considered:1,totalFixtures:1}}},fetch:async url=>{assert.match(url,/api\/draws/);return {ok:true,json:async()=>({totalFixtures:1,considered:1,scanComplete:true,diagnostics:{},verifiedCandidates:[{...pick,sport:'football'}]})}}});
+ const context=vm.createContext({renderTipQuotes:()=>{},sport:'nhl',$:id=>elements[id],drawToken:0,demoMode:false,URLSearchParams,esc:s=>s,drawPickCard:p=>'<article>'+p.sport+'</article>',get:async(q,sp)=>{assert.equal(q.action,'draws');assert.equal(sp,'nhl');return {data:{candidates:[{...pick,sport:'nhl'}],considered:1,totalFixtures:1}}},fetch:async url=>{assert.match(url,/api\/draws/);return {ok:true,json:async()=>({totalFixtures:1,considered:1,scanComplete:true,diagnostics:{},verifiedCandidates:[{...pick,sport:'football'}]})}}});
  vm.runInContext(code,context);await elements.drawGenerate.onclick();
  assert.equal(elements.drawGenerate.disabled,false);
  assert.match(elements.drawResult.innerHTML,/<article>football<\/article><article>nhl<\/article>/);
