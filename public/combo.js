@@ -4,7 +4,8 @@ export function matchesFootballH2h(player){
 
 import {scorerRecentForm} from './recent-form.js';
 import {threeFactorScorer,footballThreeFactorScorer} from './scorer-model.js';
-// Keep a strict, evidence-based scorer ranking; missing data never creates invented picks.
+// Classic 22 October scorer selection: minimum minutes and positive goal/shot evidence.
+// Retain modern lineup exclusions, league support, and optional newer models.
 function eligibleScorer(p,confirmedOnly=false){
  if(!p||p.id==null||!p.name||p.exclusionReason||p.unavailable)return false;
  const pos=String(p.lineupPosition||'').toUpperCase();
@@ -17,10 +18,10 @@ function eligibleScorer(p,confirmedOnly=false){
  if(p.questionable&&!confirmed)return false;
  if(p.externalExpectedMinutes!=null&&Number(p.externalExpectedMinutes)<50)return false;
  const goals=Number(p.goals),shots=Number(p.shotsPerGame);
- if(!Number.isFinite(goals)||goals<2||!Number.isFinite(shots))return false;
+ if(!Number.isFinite(goals)||goals<=0||!Number.isFinite(shots)||shots<=0)return false;
  // Strong enough season sample and regular minutes are mandatory.
- if(nhl)return Number(p.GP)>=10&&shots>=1.5&&goals>=3;
- return Number(p.appearances)>=10&&Number(p.minutes)>=600&&Number(p.minutesPerGame)>=60&&shots>=1&&goals>=3;
+ if(nhl)return Number(p.GP)>=5;
+ return Number(p.minutes)>=270&&Number(p.minutesPerGame)>=45;
 }
 // The scorer combination is a sport-statistics ranking without bookmaker pricing.
 export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=false,options={}){
@@ -37,7 +38,7 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
   if(formOnly&&!(nhl?['L','R','LW','RW']:del?['L','R','LW','RW','F','C']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(role))continue;
   const analysis=formOnly?scorerRecentForm(p,now):options.model==='three-factor'?(nhl?threeFactorScorer(p):footballThreeFactorScorer(p)):null;
   if((formOnly||options.model==='three-factor')&&!analysis)continue;
-  const score=formOnly?analysis.hitRate+Math.min(9,analysis.goalsPerGame)/100:analysis?analysis.expectedGoals:Number.isFinite(Number(p.score))&&Number(p.score)>=0?Number(p.score):nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
+  const score=formOnly?analysis.hitRate+Math.min(9,analysis.goalsPerGame)/100:analysis?analysis.expectedGoals:nhl?(p.goals/p.GP)*4+Math.min(7,Number(p.shotsPerGame))*.7+(p.ppgoals||0)/p.GP*.5:(p.goals*90/p.minutes)*4+Math.min(4,Number(p.shotsPerGame))*1.4+Math.min(1,p.minutesPerGame/90)+(p.xG90==null?0:Math.min(1.5,p.xG90));
   ranked.push({player:analysis?{...p,comboAnalysis:analysis}:p,game,score});
  }
  const seen=new Set(),perGame=new Map(),eligible=[];
