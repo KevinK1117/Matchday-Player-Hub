@@ -28,7 +28,7 @@ export default async function handler(req,res){
   return res.status(200).json(await delDetail(q));
  }
  if(a==='del-standings')data=await delStandings(String(q.date));
- if(a==='del-analysis')data=await delAnalysis(String(q.date),q.mode==='scorers'?'scorers':'draws');
+ if(a==='del-analysis')data=await delAnalysis(String(q.date),['scorers','form'].includes(q.mode)?q.mode:'draws');
  if(a==='del-live')data=await delLive(String(q.date));
  if(a==='del-live-form')data=await delLiveForm(String(q.date),q.id);
  if(['del-standings','del-analysis','del-live','del-live-form'].includes(a))return res.status(200).json({configured:true,data,source:'Ice Hockey API'});
