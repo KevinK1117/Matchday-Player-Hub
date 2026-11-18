@@ -1008,6 +1008,109 @@ async function loadRecentScorers(players,sp,token){
   }
  }));
 }
+// Team-goal form uses ten distinct completed matches strictly before kickoff.
+const goalFormCache=new Map();
+const validGoal=v=>v!==null&&v!==undefined&&Number.isInteger(Number(v))&&Number(v)>=0;
+function recentTeamGoals(rows,teamId,kickoff){
+ const seen=new Set(),goals=[];
+ const ordered=(Array.isArray(rows)?rows:[]).filter(g=>{
+  const when=Date.parse(g.fixture?.date),status=String(g.fixture?.status?.short||'').toUpperCase();
+  return Number.isFinite(when)&&when<kickoff&&['FT','AET','PEN','OFF','FINAL','AOT','AP'].includes(status)
+   &&[g.teams?.home?.id,g.teams?.away?.id].some(id=>String(id)===String(teamId));
+ }).sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date));
+ for(const g of ordered){
+  const id=String(g.fixture.id);if(seen.has(id))continue;seen.add(id);
+  const home=String(g.teams.home.id)===String(teamId);
+  const score=g.score?.fulltime?.home!=null&&g.score?.fulltime?.away!=null?g.score.fulltime:g.goals;
+  const n=home?score?.home:score?.away;
+  if(!validGoal(n))continue;
+  goals.push(Number(n));if(goals.length===10)break;
+ }
+ return goals.length===10?{games:10,goals:goals.reduce((a,b)=>a+b,0)}:null;
+}
+function goalFormKey(g){return (g.sport||((g.league?.id===10001)?'del':(g.league?.id===10000)?'nhl':'football'))+':'+g.fixture.id;}
+function winnerGoalForm(form){
+ const h=form?.home,a=form?.away;
+ if(h?.games!==10||a?.games!==10||!validGoal(h.goals)||!validGoal(a.goals))return null;
+ return {...form,winner:h.goals>a.goals?'home':a.goals>h.goals?'away':null};
+}
+async function gameGoalForm(g){
+ if(g.goalForm)return winnerGoalForm(g.goalForm);
+ const sp=g.sport||((g.league?.id===10000)?'nhl':(g.league?.id===10001)?'del':'football');
+ if(sp==='del')return null;
+ const key=goalFormKey(g),cached=goalFormCache.get(key);
+ if(cached?.until>Date.now())return cached.promise;
+ const promise=(async()=>{
+  const r=await get({action:'detail',id:g.fixture.id,formOnly:1},sp);
+  const d=r.data,cutoff=Date.parse(g.fixture.date);
+  if(!d?.homeRecent?.data||!d?.awayRecent?.data)return null;
+  return winnerGoalForm({
+   home:recentTeamGoals(d.homeRecent.data,g.teams.home.id,cutoff),
+   away:recentTeamGoals(d.awayRecent.data,g.teams.away.id,cutoff)
+  });
+ })().catch(()=>null);
+ goalFormCache.set(key,{promise,until:Date.now()+300000});
+ if(goalFormCache.size>150)goalFormCache.delete(goalFormCache.keys().next().value);
+ return promise;
+}
+async function loadGoalForms(fixtures,token=null){
+ const out=new Map(),unique=[...new Map(fixtures.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now()).map(g=>[goalFormKey(g),g])).values()];
+ let next=0;
+ await Promise.all(Array.from({length:Math.min(3,unique.length)},async()=>{
+  while(next<unique.length){
+   if(token!=null&&token!==comboToken)return;
+   const g=unique[next++],form=await gameGoalForm(g);
+   if(form)out.set(goalFormKey(g),form);
+  }
+ }));
+ return out;
+}
+function playerFromStrongerAttack(p,fixtures,forms){
+ const game=fixtures.find(g=>String(g.fixture.id)===String(p.fixtureId)&&(g.sport||'football')===(p.sport||'football'));
+ if(!game)return false;
+ const form=forms.get(goalFormKey(game));if(!form?.winner)return false;
+ const team=game.teams[form.winner];
+ if(p.teamId!=null&&team.id!=null)return String(p.teamId)===String(team.id);
+ const value=String(p.team||'').trim().toLowerCase();
+ return Boolean(value&&(value===String(team.name||'').trim().toLowerCase()||value===String(team.abbrev||'').trim().toLowerCase()));
+}
+async function generateWinnerBets(){
+ const btn=$('winGenerate'),out=$('winResult'),kind=$('winSport').value,date=$('date').value,count=Number($('winCount').value);
+ btn.disabled=true;out.innerHTML='<p class="result-status">Letzte zehn Spiele und erzielte Tore werden geprüft …</p>';
+ try{
+  if(demoMode){out.innerHTML='<p class="notice">Siegwetten benötigen echte abgeschlossene Teamspiele.</p>';return}
+  let candidates=[],error='';
+  if(kind==='football'){
+   candidates=games.filter(g=>isScorerCompetition(g.league)).map(g=>({...g,sport:'football'}));
+  }else{
+   const [n,d]=await Promise.allSettled([
+    get({action:'fixtures',date},'nhl'),
+    get({action:'del-analysis',date,mode:'form'},'del')
+   ]);
+   if(n.status==='fulfilled')candidates.push(...(n.value.data||[]).map(g=>({...g,sport:'nhl'})));
+   else error+='NHL-Daten nicht verfügbar. ';
+   if(d.status==='fulfilled')candidates.push(...(d.value.data?.games||[]).map(g=>({...g,sport:'del'})));
+   else error+='DEL-Daten nicht verfügbar. ';
+  }
+  const upcoming=candidates.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
+  const forms=await loadGoalForms(upcoming);
+  const ranked=upcoming.map(g=>({game:g,form:forms.get(goalFormKey(g))}))
+   .filter(x=>x.form?.winner)
+   .sort((a,b)=>Math.abs(b.form.home.goals-b.form.away.goals)-Math.abs(a.form.home.goals-a.form.away.goals))
+   .slice(0,count);
+  out.innerHTML='<p class="result-status">'+ranked.length+' von '+upcoming.length+' anstehenden Spielen mit eindeutigem Torvorsprung in der Zehnerform. '+esc(error)+'</p>'+
+   (ranked.length?ranked.map((x,i)=>{
+    const g=x.game,f=x.form,side=f.winner,selection=side==='home'?'1':'2',team=g.teams[side].name,match=g.teams.home.name+' – '+g.teams.away.name,sp=g.sport;
+    return '<article class="home-player-card player-summary-card tip-summary-card">'+
+     tipSummaryHeader({index:i,match,market:'Sieg '+selection+' · '+team,league:g.league?.name,game:g,chance:selection,label:'Formtipp · 1/2',quote:tipQuoteSlot(g,sp,'result',side)})+
+     '<div class="home-player-metrics"><div><span>'+esc(g.teams.home.name)+' · Tore</span><b>'+f.home.goals+'</b></div><div><span>'+esc(g.teams.away.name)+' · Tore</span><b>'+f.away.goals+'</b></div><div><span>Vergleich</span><b>10 Spiele je Team</b></div></div>'+
+     '<p class="notice">Tipp '+selection+' · '+esc(team)+(sp==='football'?' · reguläre Spielzeit inkl. Nachspielzeit':' · Eishockey: reguläre 60 Minuten')+'</p></article>';
+   }).join(''):'<p class="notice">Keine eindeutige Auswahl. Bei Gleichstand, weniger als zehn Spielen oder fehlenden Ergebnissen wird kein Tipp erzeugt.</p>')+
+   '<p class="notice">Die Auswahl richtet sich ausschließlich nach den erzielten Toren in den letzten zehn abgeschlossenen Spielen. Sie ist keine berechnete Siegwahrscheinlichkeit und keine Gewinnzusage. 1/2 schließt ein Remis nach regulärer Spielzeit aus.</p>';
+  renderTipQuotes(out);
+ }catch(e){out.innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
+ finally{btn.disabled=false}
+}
 async function generateMixedHockey(){
  const token=++comboToken,count=Number($('count').value),date=$('date').value;
  $('generate').disabled=true;
