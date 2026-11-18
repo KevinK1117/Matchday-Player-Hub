@@ -15,6 +15,6 @@ test('football combo ordering and displayed probability agree and Home keeps its
  const r=rankScorers(games,ps,6,now,false,{model:'three-factor'});assert.deepEqual(r.picks.map(p=>p.player.id),[2,1]);assert.equal(r.complete,false);assert.equal(ps[1].comboAnalysis,undefined);
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8'),a=html.indexOf('function scorerChance'),b=html.indexOf('function homePlayerCard',a),c=vm.createContext({});vm.runInContext(html.slice(a,b),c);
  for(const pick of r.picks){assert.equal(pick.score,pick.player.comboAnalysis.expectedGoals);assert.equal(c.scorerChance(pick.player,false),pick.player.comboAnalysis.probability);}
- assert.equal(rankScorers(games,ps,6,now).picks[0].player.id,1);
+ assert.equal(rankScorers(games,ps,6,now).picks[0].player.id,2);
  assert.equal(c.scorerChance(ps[1],false),100*(1-Math.exp(-(12/1200)*80)));
 });

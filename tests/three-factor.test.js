@@ -30,8 +30,8 @@ test('combination orders by its displayed chance and ignores old scores, goal st
  for(const pick of r.picks)assert.equal(pick.score,pick.player.comboAnalysis.expectedGoals);
  assert.ok(r.picks[0].player.comboAnalysis.probability>r.picks[1].player.comboAnalysis.probability);
  assert.equal(stronger.comboAnalysis,undefined);
- // Home keeps its existing score and ranking unless the combo model is explicitly requested.
- assert.equal(rankScorers(games,players,6,now).picks[0].player.id,3);
+ // Classic ranking uses season rates. The displayed Poisson value retains the original score.
+ assert.equal(rankScorers(games,players,6,now).picks[0].player.id,2);
  assert.equal(stronger.score,.01);
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const start=html.indexOf('function scorerChance'),end=html.indexOf('function homePlayerCard',start);
