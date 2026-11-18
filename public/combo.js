@@ -32,7 +32,8 @@ export function rankScorers(games,players,count,now=Date.now(),confirmedOnly=fal
   const game=fixtures.get(String(p.fixtureId)),nhl=p.sport==='nhl',del=p.sport==='del';
   const formOnly=options.model==='recent-form';
   if(!game||!p||p.id==null||!p.name||p.unavailable||(p.exclusionReason&&(!formOnly||!/Kein (Außenstürmer|Stürmer)|Zu geringe/.test(p.exclusionReason)))||(!formOnly&&!eligibleScorer(p,confirmedOnly)))continue;
-  if(formOnly&&!nhl&&!del&&!matchesFootballH2h(p))continue;
+  // Team eligibility for recent-form combos is checked against verified last-ten goals in the UI.
+  // Historical head-to-head results must not override the stronger recent attack.
   if(formOnly&&del&&confirmedOnly&&p.lineupSource!=='current')continue;
   const role=String(p.lineupPosition||p.position||p.positionCode||'').toUpperCase();
   if(formOnly&&!(nhl?['L','R','LW','RW']:del?['L','R','LW','RW','F','C']:['F','ST','CF','FW','ATTACKER','FORWARD']).includes(role))continue;
