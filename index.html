@@ -482,7 +482,7 @@ html[data-theme="dark"] body[data-view="combo"] .win-bets-panel select{backgroun
 <div class="wrap"><div class="intro"><div><div class="eyebrow">Dein Spiel. Alle Details.</div><h1>Der Spieltag im Blick<span style="color:var(--green)">.</span></h1></div><div class="status"><span class="dot"></span><span id="connection">Daten werden geladen</span><button id="refresh" class="iconbtn" aria-label="Aktualisieren">↻</button></div></div>
 <div id="mode" class="mode hidden"></div><div class="layout"><aside class="sidebar"><div class="side-title">DEINE FUSSBALL-LIGEN · TURNIERE · NHL</div><div id="leagues"></div><hr><div class="side-title">DEIN MATCHDAY</div><button class="leaguebtn" id="favorites">☆ Meine Favoriten</button><a class="leaguebtn" href="/players.html">↗ Spieler-Analyse</a><a class="leaguebtn" href="/public/del.html">🏒 DEL · Deutsche Eishockey Liga</a><div class="side-note"><strong>Nur die von dir ausgewählten Wettbewerbe.</strong>Die Ligen aus deiner Liste sowie Champions League, Europa League, WM, EM und Nations League. Andere Fußball-Wettbewerbe werden ausgeblendet; NHL bleibt separat. Daten je nach Anbieterabdeckung.</div></aside>
 <main><section id="homePanel"><div class="dashboard"><div class="dashboard-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h1m6 0h1m-8 3h1m6 0h1"/></svg><strong id="dashGames">–</strong><span>Spiele am<br>Spieltag</span></div><div class="dashboard-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg><strong id="dashPlayers">–</strong><span>Spieler<br>geprüft</span></div><div class="dashboard-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><strong id="dashTime">–</strong><span>Letztes<br>Update</span></div><div class="dashboard-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h5l3-9 4 18 3-9h5"/></svg><strong id="dashApi">API</strong><span id="dashApiLabel">Verbinde …</span></div></div><div class="home-heading"><div><h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10v6a5 5 0 0 1-10 0zM7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4m-5 2v6m-5 1h10"/></svg>Top-Torschützen</h1><p id="homeSubtitle">Spielerstatistiken für den gewählten Spieltag</p></div><button class="iconbtn" id="homeRefresh" aria-label="Spieleranalysen aktualisieren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7a8 8 0 0 0-13-3L3 8m0-5v5h5m-4 9a8 8 0 0 0 13 3l4-4m0 5v-5h-5"/></svg></button></div><div id="homePlayers" aria-live="polite"><div class="loading">Spieler werden geladen …</div></div></section><section id="favoritesPanel" class="view-panel"><div class="home-heading"><div><h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.5l-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z"/></svg>Favoriten</h1><p>Deine gespeicherten Spieler und Spiele</p></div></div><div id="favoriteContent"></div></section><section id="infoPanel" class="view-panel"><div class="home-heading"><div><h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg>Über Matchday</h1><p>Fußball & NHL · dein Spieltag im Blick</p></div></div><div class="info-card"><h2>So liest du die Analysen</h2><p>Die Auswahl nutzt Tore, Schüsse und Einsatzzeit. Ein Ranking ist keine kalibrierte Trefferwahrscheinlichkeit und keine Gewinngarantie.</p><h2>Nachvollziehbare Daten</h2><p>Fußball: API-Sports. Eishockey: NHL. Fehlende Werte bleiben als „–“ markiert. Aktuelle Aufstellungen und Statistiken sind nicht für jede Begegnung verfügbar.</p><h2>Auf dem iPhone</h2><p>Öffne Matchday in Safari und wähle „Teilen“ → „Zum Home-Bildschirm“. Das Fußball-/Eishockey-Icon ist bereits hinterlegt.</p><h2>Kombis</h2><p>Spieler- und Kombianalysen basieren ausschließlich auf Sportdaten. 18+ · keine automatische Wettabgabe.</p><button class="secondary" data-view="table">Tabellen öffnen</button><button class="secondary" data-view="scorers">Liga-Topscorer</button></div></section><div class="search-panel"><input class="search" id="search" placeholder="Team oder Liga suchen …" aria-label="Team oder Liga suchen"></div><div class="banner card"><div class="eyebrow">MATCHCENTER</div><h2>Jede Begegnung hat eine Geschichte.</h2><p>Ergebnisse, Form und direkte Duelle. Alles an einem Ort.</p></div><section class="card" id="maincard"><div class="browse-tabs"><button class="pill active" data-view="scores">Spiele</button><button class="pill" data-view="table">Tabelle</button><button class="pill" data-view="scorers">Topscorer</button></div><div class="filters"><div class="pills" id="filters"><button class="pill active" data-filter="all">Alle</button><button class="pill" data-filter="live">● Live</button><button class="pill" data-filter="upcoming">Geplant</button><button class="pill" data-filter="finished">Beendet</button></div><div class="datebox"><button class="iconbtn" id="prev" aria-label="Vorheriger Tag">‹</button><input type="date" id="date" aria-label="Spieltag"><button class="iconbtn" id="next" aria-label="Nächster Tag">›</button></div></div><div id="content" aria-live="polite"><div class="loading">Spieltag wird geladen …</div></div></section></main>
-<aside class="rightcol"><section class="card combo-card" id="combo-card"><div class="card-head"><div><div class="eyebrow">DEINE AUSWAHL</div><h2>Torschützen-Kombi · NHL &amp; DEL</h2></div><span class="combo-icon">✦</span></div><div class="combo-body"><p>Fußball: zuerst direkter Vergleich. Danach aktuelle Form · letzte 5–10 Einsätze · mindestens 40 % Spiele mit Tor · bis zu 3 Spieler je Begegnung.</p><label for="count">Anzahl Torschützen</label><select id="count"><option value="1">Einzelanalyse</option><option value="2">2er-Kombi</option><option value="3" selected>3er-Kombi</option><option value="6">6er-Kombi</option><option value="7">7er-Kombi</option><option value="8">8er-Kombi</option><option value="9">9er-Kombi</option><option value="10">10er-Kombi</option><option value="11">11er-Kombi</option><option value="12">12er-Kombi</option><option value="13">13er-Kombi</option><option value="14">14er-Kombi</option><option value="15">15er-Kombi</option><option value="16">16er-Kombi</option><option value="17">17er-Kombi</option><option value="18">18er-Kombi</option><option value="19">19er-Kombi</option><option value="20">20er-Kombi</option></select><input type="checkbox" id="confirmedOnly" hidden><button id="generate" class="primary">✦ Kombi erstellen</button><div id="comboResult" aria-live="polite"></div><div class="live-combo-box"><div class="eyebrow">LIVE · FUSSBALL & NHL</div><h3>Live-Tipps pro Spiel</h3><p>Nur jüngste Teamform: Beide Teams müssen in mindestens 60 % ihrer letzten 5–10 Spiele getroffen haben. Keine Quotenwertung; keine Wahrscheinlichkeit für ein spätes Tor.</p><label for="liveSport">Sportart</label><select id="liveSport"><option value="football">Fußball</option><option value="nhl">Eishockey · NHL &amp; DEL</option></select><label for="liveCount">Anzahl</label><select id="liveCount"><option value="6">6er-Raster</option><option value="7">7er-Raster</option><option value="8">8er-Raster</option><option value="9">9er-Raster</option><option value="10">10er-Raster</option><option value="11">11er-Raster</option><option value="12">12er-Raster</option><option value="13">13er-Raster</option><option value="14">14er-Raster</option><option value="15">15er-Raster</option><option value="16">16er-Raster</option><option value="17">17er-Raster</option><option value="18">18er-Raster</option><option value="19">19er-Raster</option><option value="20">20er-Raster</option></select><button id="liveRefresh" class="secondary" type="button">↻ Live analysieren</button><button id="pushToggle" class="secondary" type="button">🔔 Push aktivieren</button><p id="pushStatus" class="notice">iPhone: Seite zum Home-Bildschirm hinzufügen und dort öffnen.</p><p id="liveMeta" class="notice">Live-Abfrage noch nicht gestartet</p><div id="liveResult" aria-live="polite"></div></div><p class="notice" style="margin:15px 0 0">18+ · Kombiwetten haben ein hohes Verlustrisiko. Keine Gewinngarantie. Es werden keine Wetten platziert.</p></div></section><section class="card"><div class="card-head"><h3>Spieler im Fokus</h3><span class="tiny">ENTDECKEN</span></div><div id="focusPlayers"><div class="empty">Spieler über Aufstellungen oder die Spieler-Suche öffnen.</div></div><a class="mini-links" style="display:block" href="/players.html">Zur erweiterten Spieler-Analyse →</a></section><section class="card"><div class="combo-body"><div class="eyebrow">TRANSPARENTE DATEN</div><h3 style="margin:7px 0">Wissen, was dahintersteckt.</h3><p style="margin:0">Fehlende Statistiken bleiben als nicht verfügbar markiert. Echte Daten und Demo werden getrennt angezeigt.</p><button id="demo" class="secondary" style="margin-top:15px">Demo ansehen</button></div></section></aside></div><footer class="footer"><span>© 2026 Matchday · Fußball & NHL · unabhängiges Matchcenter</span><span id="updated">Zeitzone: Europe/Berlin</span></footer></div>
+<aside class="rightcol"><section class="card combo-card" id="combo-card"><div class="card-head"><div><div class="eyebrow">DEINE AUSWAHL</div><h2>Torschützen-Kombi · NHL &amp; DEL</h2></div><span class="combo-icon">✦</span></div><div class="combo-body"><p>Torschützen-Kombi: Pro Begegnung zählt ausschließlich der Spieler, der im letzten abgeschlossenen direkten Vergleich (H2H) das erste Tor erzielt hat – egal für welches Team. Aktueller Kader wird geprüft; ohne Nachweis kein Tipp.</p><label for="count">Anzahl Torschützen</label><select id="count"><option value="1">Einzelanalyse</option><option value="2">2er-Kombi</option><option value="3" selected>3er-Kombi</option><option value="6">6er-Kombi</option><option value="7">7er-Kombi</option><option value="8">8er-Kombi</option><option value="9">9er-Kombi</option><option value="10">10er-Kombi</option><option value="11">11er-Kombi</option><option value="12">12er-Kombi</option><option value="13">13er-Kombi</option><option value="14">14er-Kombi</option><option value="15">15er-Kombi</option><option value="16">16er-Kombi</option><option value="17">17er-Kombi</option><option value="18">18er-Kombi</option><option value="19">19er-Kombi</option><option value="20">20er-Kombi</option></select><input type="checkbox" id="confirmedOnly" hidden><button id="generate" class="primary">✦ Kombi erstellen</button><div id="comboResult" aria-live="polite"></div><div class="live-combo-box"><div class="eyebrow">LIVE · FUSSBALL & NHL</div><h3>Live-Tipps pro Spiel</h3><p>Nur jüngste Teamform: Beide Teams müssen in mindestens 60 % ihrer letzten 5–10 Spiele getroffen haben. Keine Quotenwertung; keine Wahrscheinlichkeit für ein spätes Tor.</p><label for="liveSport">Sportart</label><select id="liveSport"><option value="football">Fußball</option><option value="nhl">Eishockey · NHL &amp; DEL</option></select><label for="liveCount">Anzahl</label><select id="liveCount"><option value="6">6er-Raster</option><option value="7">7er-Raster</option><option value="8">8er-Raster</option><option value="9">9er-Raster</option><option value="10">10er-Raster</option><option value="11">11er-Raster</option><option value="12">12er-Raster</option><option value="13">13er-Raster</option><option value="14">14er-Raster</option><option value="15">15er-Raster</option><option value="16">16er-Raster</option><option value="17">17er-Raster</option><option value="18">18er-Raster</option><option value="19">19er-Raster</option><option value="20">20er-Raster</option></select><button id="liveRefresh" class="secondary" type="button">↻ Live analysieren</button><button id="pushToggle" class="secondary" type="button">🔔 Push aktivieren</button><p id="pushStatus" class="notice">iPhone: Seite zum Home-Bildschirm hinzufügen und dort öffnen.</p><p id="liveMeta" class="notice">Live-Abfrage noch nicht gestartet</p><div id="liveResult" aria-live="polite"></div></div><p class="notice" style="margin:15px 0 0">18+ · Kombiwetten haben ein hohes Verlustrisiko. Keine Gewinngarantie. Es werden keine Wetten platziert.</p></div></section><section class="card"><div class="card-head"><h3>Spieler im Fokus</h3><span class="tiny">ENTDECKEN</span></div><div id="focusPlayers"><div class="empty">Spieler über Aufstellungen oder die Spieler-Suche öffnen.</div></div><a class="mini-links" style="display:block" href="/players.html">Zur erweiterten Spieler-Analyse →</a></section><section class="card"><div class="combo-body"><div class="eyebrow">TRANSPARENTE DATEN</div><h3 style="margin:7px 0">Wissen, was dahintersteckt.</h3><p style="margin:0">Fehlende Statistiken bleiben als nicht verfügbar markiert. Echte Daten und Demo werden getrennt angezeigt.</p><button id="demo" class="secondary" style="margin-top:15px">Demo ansehen</button></div></section></aside></div><footer class="footer"><span>© 2026 Matchday · Fußball & NHL · unabhängiges Matchcenter</span><span id="updated">Zeitzone: Europe/Berlin</span></footer></div>
 <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-label="Matchcenter"><div class="dialog"><div class="modal-head"><span id="modalTitle">Matchcenter</span><button class="iconbtn" id="close" aria-label="Schließen">✕</button></div><div id="modalContent"></div></div></div>
 <script type="module">
 import {matchClockLabel,isNhlThirdPeriod} from '/public/match-clock.js?v=live-period-1';
@@ -1124,65 +1124,102 @@ async function generateWinnerBets(){
  }catch(e){out.innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
  finally{btn.disabled=false}
 }
-async function generateMixedHockey(){
- const token=++comboToken,count=Number($('count').value),date=$('date').value;
- $('generate').disabled=true;
- $('comboResult').replaceChildren();
- try{
-  const [nhlGames,delGames,nhlPlayers]=await Promise.allSettled([
-   get({action:'fixtures',date},'nhl'),
-   get({action:'del-analysis',date,mode:'scorers'},'del'),
-   fetch('/api/nhl?modelVersion=2&lineupVersion=5&formVersion=2&'+new URLSearchParams({date,count:String(count)}),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'NHL-Spielerdaten fehlen');return d})
-  ]);
-  if(token!==comboToken)return;
-  const nhl=nhlGames.status==='fulfilled'?(nhlGames.value.data||[]):[];
-  const del=delGames.status==='fulfilled'?(delGames.value.data?.games||[]):[];
-  const upcoming=[...nhl,...del].filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  const players=nhlPlayers.status==='fulfilled'?(nhlPlayers.value.allPlayers||nhlPlayers.value.players||[]):[];
-  await loadRecentScorers(players,'nhl',token);
-  if(token!==comboToken)return;
-  const delPlayers=delGames.status==='fulfilled'?(delGames.value.data?.players||[]):[];
-  const allPlayers=[...players.map(p=>({...p,sport:'nhl'})),...delPlayers];
-  const relevant=new Set(allPlayers.map(p=>String(p.fixtureId)));
-  const goalForms=await loadGoalForms(upcoming.filter(g=>relevant.has(String(g.fixture.id))),token);
-  if(token!==comboToken)return;
-  const eligible=allPlayers.filter(p=>playerFromStrongerAttack(p,upcoming,goalForms));
-  const selection=rankScorers(upcoming,eligible,count,Date.now(),$('confirmedOnly').checked,{model:'recent-form'});
-  const notes='<p class="notice">Formauswahl: Spielerform bis zehn Einsätze, zehn abgeschlossene Teamspiele, nur das torstärkere Team, maximal drei Spieler je Begegnung. Gemeinsamer Spieltag: '+nhl.length+' NHL-Spiele · '+del.length+' DEL-Spiele.'+(delGames.status==='rejected'?' DEL-Spielerdaten konnten nicht geladen werden.':delPlayers.length?'':' Für die DEL liegt keine ausreichende Spielerform vor.')+'</p>';
-  if(selection.picks.length){renderScorerSelection(selection,'nhl');$('comboResult').insertAdjacentHTML('afterbegin',notes);$('comboResult').insertAdjacentHTML('beforeend','<p class="notice">Sortiert nach Torhäufigkeit aus bis zu zehn belegten Einsätzen. Nur das torstärkere Team der letzten zehn Teamspiele wird berücksichtigt; maximal drei Spieler je Begegnung. Prozentwert = vergangene Trefferhäufigkeit, keine kommende Trefferchance.</p>')}
-  else $('comboResult').innerHTML=notes+'<p class="result-status">Keine ausreichend belegten NHL-/DEL-Torschützen für diesen Spieltag. '+(nhlPlayers.status==='rejected'?'NHL-Spielerdaten konnten nicht geladen werden.':'Anderen Spieltag auswählen oder auf neue Daten warten.')+'</p>';
- }catch(e){if(token===comboToken)$('comboResult').innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
- finally{if(token===comboToken)$('generate').disabled=false}
+// H2H first-goal scorer selection: one historical first scorer per future fixture,
+// independent of which team has stronger recent form. No substitute scorer is invented.
+const h2hFirstCache=new Map(),h2hRosterCache=new Map();
+async function h2hFirstForGame(game){
+ const sp=game.sport||'football',key=sp+':'+game.fixture.id;
+ const hit=h2hFirstCache.get(key);
+ if(hit?.until>Date.now())return hit.promise;
+ const promise=(async()=>{
+  const params=sp==='del'?{action:'del-first-goal',date:$('date').value,home:game.teams.home.name,away:game.teams.away.name,start:game.fixture.date}
+   :{action:'h2h-first-goal',id:game.fixture.id};
+  const r=await get(params,sp);
+  return r.data||null;
+ })().catch(()=>null);
+ h2hFirstCache.set(key,{promise,until:Date.now()+300000});
+ if(h2hFirstCache.size>120)h2hFirstCache.delete(h2hFirstCache.keys().next().value);
+ return promise;
 }
-async function generate(){
- if(sport==='nhl'||sport==='del')return generateMixedHockey();
- let stage='Start';
- if(!demoMode&&!games.some(g=>g.fixture.status.short==='NS'&&Date.parse(g.fixture.date)>Date.now())){$('comboResult').innerHTML='<p class="result-status">Keine kommenden Spiele für diesen Tag. Bitte einen anderen Tag wählen.</p>';return}
- const token=++comboToken,currentSport=sport,count=Number($('count').value),confirmed=$('confirmedOnly').checked;
- $('generate').disabled=true;$('comboResult').replaceChildren();
- try{
-  stage='Spieldaten vorbereiten';
-  let players;
-  const input=demoMode?games.map(g=>({...g,fixture:{...g.fixture,date:new Date(Date.now()+7200000).toISOString()}})):games;
-  if(demoMode){players=input.filter(g=>g.fixture.status.short==='NS').flatMap((g,i)=>Array.from({length:4},(_,j)=>({id:10001+i*4+j,name:'Demo-Spieler '+(i*4+j+1),fixtureId:g.fixture.id,team:g.teams.home.name,goals:6+i,minutes:800,minutesPerGame:80,shotsPerGame:1.6,participation:'Einsatz nicht bestätigt',sport:currentSport,GP:20,ppgoals:3})));}
-  else{
-   stage='Torschützen-API laden';
-   const query=new URLSearchParams({date:$('date').value,sport:currentSport,count:String(count),formOnly:'1',h2h:'1'});
-   const cached=null;if(cached?.rawPlayers){players=cached.rawPlayers}else{const r=await fetch((currentSport==='nhl'?'/api/nhl?modelVersion=2&lineupVersion=5&':'/api/football?lineupVersion=3&')+query,{}),d=await r.json();if(!r.ok)throw Error(d.error||'Spielerdaten derzeit nicht verfügbar');players=(d.allPlayers||d.players||[]).map(p=>({...p,sport:currentSport}));}
-  }
-  if(token!==comboToken)return;
-  if(!demoMode)await loadRecentScorers(players,'football',token);
-  if(token!==comboToken)return;
-  stage='Spieler bewerten';
-  const relevant=new Set(players.map(p=>String(p.fixtureId)));
-  const goalForms=demoMode?new Map():await loadGoalForms(input.filter(g=>relevant.has(String(g.fixture.id))),token);
-  if(token!==comboToken)return;
-  const eligible=demoMode?[]:players.filter(p=>playerFromStrongerAttack(p,input,goalForms));
-  let selection=rankScorers(input,eligible,count,Date.now(),confirmed,{model:'recent-form'});
-  renderScorerSelection(selection,currentSport);
-
- }catch(e){if(token===comboToken)$('comboResult').innerHTML=`<p class="result-status">Fehler bei ${esc(stage)}: ${esc(e.message||String(e))}. Bitte Screenshot dieser Meldung senden.</p>`;console.error('Scorer-Kombi',stage,e)}finally{if(token===comboToken)$('generate').disabled=false}
+async function h2hCurrentRoster(game,scorer){
+ const sp=game.sport||'football';
+ if(sp==='del')return scorer.verifiedRoster?{id:scorer.id,name:scorer.name,position:scorer.position||null}:null;
+ let team=null,params=null;
+ if(sp==='nhl'){
+  team=[game.teams.home,game.teams.away].find(t=>t.abbrev===scorer.teamAbbrev);
+  if(!team?.abbrev)return null;
+  params={action:'squad',team:team.abbrev};
+ }else{
+  team=[game.teams.home,game.teams.away].find(t=>String(t.id)===String(scorer.teamId));
+  if(!team||!game.league?.season)return null;
+  params={action:'squad',id:team.id,season:game.league.season};
+ }
+ const key=sp+':'+(team.id||team.abbrev)+':'+(game.league?.season||'current');
+ let cached=h2hRosterCache.get(key);
+ if(!cached||cached.until<=Date.now()){
+  cached={until:Date.now()+300000,promise:get(params,sp).then(r=>r.data||[]).catch(()=>[])};
+  h2hRosterCache.set(key,cached);
+  if(h2hRosterCache.size>90)h2hRosterCache.delete(h2hRosterCache.keys().next().value);
+ }
+ const roster=await cached.promise;
+ const match=roster.find(p=>String(sp==='nhl'?p.playerId:p.player?.id)===String(scorer.id));
+ if(!match)return null;
+ return sp==='nhl'?{id:match.playerId,name:match.name||scorer.name,photo:match.headshot||null,position:match.positionCode||null}:
+  {id:match.player.id,name:match.player.name||scorer.name,photo:match.player.photo||null,position:match.statistics?.[0]?.games?.position||null};
 }
+async function generateH2hScorers(){
+ const token=++comboToken,date=$('date').value,count=Number($('count').value),hockey=sport==='nhl'||sport==='del';
+ const button=$('generate'),out=$('comboResult');button.disabled=true;
+ out.innerHTML='<p class="result-status">Letzten direkten Vergleich und erstes Tor je Begegnung prüfen …</p>';
+ try{
+  if(demoMode){out.innerHTML='<p class="notice">Die H2H-Torschützenauswahl benötigt echte Spielereignisse.</p>';return}
+  let fixtures=[],errors=[];
+  if(hockey){
+   const [nhl,del]=await Promise.allSettled([get({action:'fixtures',date},'nhl'),get({action:'del-analysis',date,mode:'form'},'del')]);
+   if(nhl.status==='fulfilled')fixtures.push(...(nhl.value.data||[]).map(g=>({...g,sport:'nhl'})));
+   else errors.push('NHL-Spielplan nicht verfügbar');
+   if(del.status==='fulfilled')fixtures.push(...(del.value.data?.games||[]).map(g=>({...g,sport:'del'})));
+   else errors.push('DEL-Spielplan nicht verfügbar');
+  }else fixtures=games.filter(g=>isScorerCompetition(g.league)).map(g=>({...g,sport:'football'}));
+  const upcoming=fixtures.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now()+300000)
+   .sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
+  const selected=[],missing={noH2h:0,notInRoster:0},next={value:0};
+  await Promise.all(Array.from({length:Math.min(3,upcoming.length)},async()=>{
+   while(next.value<upcoming.length){
+    if(token!==comboToken)return;
+    const game=upcoming[next.value++];
+    const evidence=await h2hFirstForGame(game);
+    if(!evidence?.scorer){missing.noH2h++;continue}
+    const player=await h2hCurrentRoster(game,evidence.scorer);
+    if(!player){missing.notInRoster++;continue}
+    const sp=game.sport,team=sp==='nhl'?
+      [game.teams.home,game.teams.away].find(t=>t.abbrev===evidence.scorer.teamAbbrev):
+      [game.teams.home,game.teams.away].find(t=>String(t.id)===String(evidence.scorer.teamId));
+    if(!team){missing.notInRoster++;continue}
+    selected.push({game,player:{...player,team:team.name,sport:sp,fixtureId:game.fixture.id},evidence});
+   }
+  }));
+  if(token!==comboToken)return;
+  selected.sort((a,b)=>Date.parse(a.game.fixture.date)-Date.parse(b.game.fixture.date));
+  const picks=selected.slice(0,count);
+  out.innerHTML='<p class="result-status">'+picks.length+' H2H-Ersttorschützen ausgewählt · '+upcoming.length+' anstehende Begegnungen'+
+   (errors.length?' · '+esc(errors.join(' · ')):'')+'</p>'+
+   (picks.length?'<div class="scorer-grid">'+picks.map((row,i)=>{
+    const {game:g,player:p,evidence:e}=row,sp=g.sport,match=g.teams.home.name+' – '+g.teams.away.name;
+    const prev=e.h2hDate?new Date(e.h2hDate).toLocaleDateString('de-DE'):'Datum unbekannt';
+    const moment=e.minute!=null?e.minute+'. Minute':e.period?'Drittel '+e.period+(e.time?' · '+e.time:''):null;
+    return '<article class="home-player-card player-summary-card tip-summary-card">'+
+     tipSummaryHeader({index:i,match,market:p.name+' · '+p.team,league:g.league?.name,game:g,chance:'1. Tor',label:'Letztes H2H',quote:tipQuoteSlot(g,sp,'scorer',p.name)})+
+     '<div class="home-player-metrics"><div><span>Letztes H2H</span><b>'+esc(prev)+'</b></div><div><span>Erstes Tor</span><b>'+esc(moment||'Bestätigt')+'</b></div><div><span>Spieler</span><b>'+esc(p.name)+'</b></div></div>'+
+     '<p class="notice">Torschütze des ersten Tores im letzten direkten Vergleich. Aktuelle Mannschaftszugehörigkeit geprüft. Keine Aussage zur künftigen Trefferwahrscheinlichkeit.</p></article>';
+   }).join('')+'</div>':'<p class="notice">Kein belegter Ersttorschütze aus dem letzten direkten Vergleich im aktuellen Kader verfügbar. Es werden keine Ersatzspieler anhand der Form ausgewählt.</p>')+
+   '<p class="notice">Auswahl unabhängig von der Mannschaftsform. Pro Begegnung höchstens ein Spieler. Ohne verifizierbares erstes Tor oder aktuellen Kaderabgleich kein Tipp. Nicht ausgewertet: '+missing.noH2h+' ohne belastbaren H2H-Torschützen, '+missing.notInRoster+' ohne aktuellen Kadernachweis.</p>';
+  renderTipQuotes(out);
+ }catch(e){if(token===comboToken)out.innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
+ finally{if(token===comboToken)button.disabled=false}
+}
+async function generateMixedHockey(){return generateH2hScorers()}
+async function generate(){return generateH2hScorers()}
 
 async function renderNhlTable(){const n=request;$('content').innerHTML='<div class="loading">NHL-Tabelle wird geladen …</div>';try{const rows=demoMode?[]:(await get({action:'table'})).data;if(sport!=='nhl'||view!=='table'||request!==n)return;$('content').innerHTML='<div class="league-head">NHL · aktuelle Gesamttabelle · Anbieterstand</div>'+(rows?.length?`<div class="tablewrap"><table><tr><th>#</th><th>Team</th><th>Sp</th><th>S</th><th>N</th><th>OT</th><th>Tore</th><th>Pkt</th></tr>${[...rows].sort((a,b)=>a.leagueSequence-b.leagueSequence).map(r=>`<tr><td>${fmt(r.leagueSequence)}</td><td>${esc(r.teamName?.default||r.teamAbbrev?.default)}</td><td>${fmt(r.gamesPlayed)}</td><td>${fmt(r.wins)}</td><td>${fmt(r.losses)}</td><td>${fmt(r.otLosses)}</td><td>${fmt(r.goalFor)}:${fmt(r.goalAgainst)}</td><td><strong>${fmt(r.points)}</strong></td></tr>`).join('')}</table></div>`:'<div class="empty">Keine NHL-Tabelle verfügbar. Demo enthält keine Tabelle.</div>')}catch(e){if(sport==='nhl'&&view==='table')$('content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
 async function nhlSquad(id){const el=$('roster'),g=games.find(g=>[g.teams.home.id,g.teams.away.id].includes(Number(id))),team=g?.teams.home.id===Number(id)?g.teams.home:g?.teams.away;if(!team)return;el.innerHTML='<div class="loading">NHL-Skater werden geladen …</div>';try{const rows=demoMode?[{playerId:10001,name:'Demo-Torschütze',goals:12,shots:90} ]:(await get({action:'squad',team:team.abbrev})).data;if($('teamselect')?.value!==id||sport!=='nhl')return;el.innerHTML=rows?.length?rows.sort((a,b)=>(b.goals||0)-(a.goals||0)).map(p=>`<button class="top-player" data-player="${p.playerId}" data-season="${g.league.season}">${portrait(p.playerId,true,p.headshot||p.photo,team?.abbrev)}<span>${esc(p.name)}<small>${fmt(p.goals)} Tore · ${fmt(p.shots)} Torschüsse</small></span><span class="rating">→</span></button>`).join(''):'<div class="empty">Keine Skaterstatistiken verfügbar.</div>'}catch(e){el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
