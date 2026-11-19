@@ -489,6 +489,29 @@ html[data-theme="dark"] body[data-view="combo"] .win-bets-panel select{backgroun
 #modal.player-modal .profile-league-logo{width:39px;height:39px;object-fit:contain;flex-shrink:0}
 #modal.player-modal .profile-heading-club-logo{width:28px;height:28px;object-fit:contain;flex-shrink:0}
 #modal.player-modal .profile-position-line{margin:5px 0 10px;color:var(--muted,#8290a1);font-size:12px}
+</style><style id="profile-compact-mobile">
+@media(max-width:650px){
+#modal.player-modal .detailbody{padding:12px 14px!important}
+#modal.player-modal .profile{gap:9px!important;align-items:center}
+#modal.player-modal .profile h1{font-size:21px!important;margin:3px 0!important}
+#modal.player-modal .profile .eyebrow{font-size:10px!important;letter-spacing:.09em}
+#modal.player-modal .profile .muted{font-size:11px!important;line-height:1.35;margin:5px 0!important}
+#modal.player-modal .profile-current-club{gap:7px;margin:6px 0 3px;padding:6px 8px;border-radius:9px}
+#modal.player-modal .profile-current-club small{font-size:9px}
+#modal.player-modal .profile-current-club strong{font-size:12px}
+#modal.player-modal .profile-club-logo{width:25px;height:25px}
+#modal.player-modal .profile-league-heading{gap:8px;padding:8px 9px;margin:12px 0 5px;border-radius:9px}
+#modal.player-modal .profile-league-heading strong{font-size:13px}
+#modal.player-modal .profile-league-heading span{font-size:10px}
+#modal.player-modal .profile-league-logo{width:27px;height:27px}
+#modal.player-modal .profile-heading-club-logo{width:20px;height:20px}
+#modal.player-modal .profile-position-line{margin:3px 0 6px;font-size:11px}
+#modal.player-modal .profile-xg{margin:7px 0!important;padding:7px 9px!important}
+#modal.player-modal .metrics{gap:6px!important}
+#modal.player-modal .metric{padding:8px!important;min-height:0!important}
+#modal.player-modal .metric strong{font-size:18px!important}
+#modal.player-modal .profile-extra{margin:4px 0!important}
+}
 </style></head><body>
 <header class="app-header"><div class="top"><a class="brand" href="/" aria-label="Matchday Startseite"><img class="brand-icon" src="/public/matchday-sports-192-v4.png" alt=""><span><strong>Matchday <em>PRO</em></strong><small>Torschützen-Analysen nach Spieltag</small></span></a><button id="matchday-theme-toggle" type="button" aria-label="Darstellung wechseln">☀️ Hell</button><div class="calendar-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h1m6 0h1m-8 3h1m6 0h1"/></svg><div><select id="dayPreset" aria-label="Schnellauswahl Spieltag"><option value="today">Heute</option><option value="tomorrow">Morgen</option><option value="custom">Datum wählen</option></select><div id="dateSlot"></div></div></div><nav aria-label="Hauptnavigation"><button data-view="home" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-8H9v8H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></button><button data-view="combo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8zM2 12l10 5 10-5M2 16l10 5 10-5"/></svg><span>Kombis</span></button><button data-view="scores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h1m6 0h1m-8 3h1m6 0h1"/></svg><span>Spiele</span></button><button data-view="favorites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.5l-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z"/></svg><span>Favoriten</span></button><button data-view="info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><span>Infos</span></button></nav></div></header>
 <div class="sportbar"><div class="sports"><button class="sport-card active" data-sport="football"><span class="sport-symbol">⚽</span><span><strong>Fußball</strong><small>Ausgewählte Ligen &amp; Turniere</small></span></button><button class="sport-card" data-sport="nhl"><span class="sport-symbol">🏒</span><span><strong>Eishockey</strong><small>NHL &amp; DEL</small></span></button><button class="sport-card" id="showLeagues"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8zM2 12l10 5 10-5M2 16l10 5 10-5"/></svg><span><strong>Wettbewerbe</strong><small>Ligen wählen</small></span></button></div><div class="hockey-leagues hidden" id="hockeyLeagues" aria-label="Eishockey-Liga"><button class="pill" data-sport="nhl">NHL</button><button class="pill" data-sport="del">PENNY DEL</button></div></div>
