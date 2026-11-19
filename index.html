@@ -1220,7 +1220,7 @@ async function generateH2hScorers(){
     if(sp==='nhl'){
      const totals=(details?.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0]||{};
      const recent=details?.last10Games||details?.last5Games||[];
-     Object.assign(p,{goals:totals.goals,GP:totals.gamesPlayed,shots:totals.shots,shotsPerGame:totals.gamesPlayed>0?totals.shots/totals.gamesPlayed:null,
+     Object.assign(p,{goals:totals.goals,GP:totals.gamesPlayed,shots:totals.shots,score:totals.gamesPlayed>0&&totals.goals!=null?totals.goals/totals.gamesPlayed:null,shotsPerGame:totals.gamesPlayed>0?totals.shots/totals.gamesPlayed:null,
       last5Goals:details?.recentSummary?.goals??recent.slice(0,5).reduce((n,x)=>n+(Number(x.goals)||0),0),photo:p.photo||details?.headshot});
     }else{
      const stat=details?.profiles?.[0]?.statistics?.[0]||{},games=stat.games||{},goals=stat.goals||{},shots=stat.shots||{};
