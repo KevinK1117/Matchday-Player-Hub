@@ -28,10 +28,10 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control',['detail','lineups'].includes(String(req.query?.action||''))?'no-store, max-age=0':'s-maxage=30, stale-while-revalidate=15');
  const q=req.query||{},action=q.action||'fixtures';
  if(action==='openliga')return openliga(req,res);
- if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','lineup-reference','liveodds'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
+ if(!['fixtures','clock','detail','table','player','squad','scorers','leagues','lineups','lineup-reference','liveodds','h2h-first-goal'].includes(action))return res.status(400).json({error:'Unbekannte Abfrage'});
  const date=String(q.date||'');
  if(action==='fixtures'&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+'T12:00:00Z'))))return res.status(400).json({error:'Ungültiges Datum'});
- if(['clock','detail','lineups','lineup-reference','player','squad','liveodds'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
+ if(['clock','detail','lineups','lineup-reference','player','squad','liveodds','h2h-first-goal'].includes(action)&&!integer(q.id))return res.status(400).json({error:'Ungültige ID'});
  if(['table','player','squad','scorers'].includes(action)&&!/^20\d{2}$/.test(String(q.season)))return res.status(400).json({error:'Ungültige Saison'});
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  if(action==='player'&&q.team!=null&&!integer(q.team))return res.status(400).json({error:'Ungültige Team-ID'});
@@ -118,6 +118,28 @@ export default async function handler(req,res){
    }
   }
   data={fixtureId:Number(q.id),updatedAt:first?.update||null,blocked:!!first?.status?.blocked,available:!!first,offers};
+ }
+ if(action==='h2h-first-goal'){
+  const g=(await api('/fixtures?id='+q.id,key))[0];
+  if(!g||!isScorerCompetition(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
+  const kickoff=Date.parse(g.fixture.date),homeId=g.teams.home.id,awayId=g.teams.away.id;
+  const history=await api('/fixtures/headtohead?h2h='+homeId+'-'+awayId+'&last=20',key);
+  const last=history.filter(h=>['FT','AET','PEN'].includes(h.fixture?.status?.short)&&Date.parse(h.fixture.date)<kickoff&&
+   [h.teams?.home?.id,h.teams?.away?.id].includes(homeId)&&[h.teams?.home?.id,h.teams?.away?.id].includes(awayId))
+   .sort((a,b)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date))[0];
+  if(!last){data={fixtureId:g.fixture.id,scorer:null,reason:'Kein abgeschlossener direkter Vergleich verfügbar'};}
+  else{
+   const events=await api('/fixtures/events?fixture='+last.fixture.id,key);
+   const goals=events.map((e,i)=>({...e,_order:i})).filter(e=>String(e.type||'').toLowerCase()==='goal')
+    .sort((a,b)=>(Number(a.time?.elapsed)||0)-(Number(b.time?.elapsed)||0)||
+     (Number(a.time?.extra)||0)-(Number(b.time?.extra)||0)||a._order-b._order);
+   const first=goals[0],own=/own goal|eigento?r/i.test(String(first?.detail||''));
+   const valid=first&&!own&&first.player?.id&&first.player?.name&&[homeId,awayId].includes(first.team?.id);
+   data={fixtureId:g.fixture.id,h2hFixtureId:last.fixture.id,h2hDate:last.fixture.date,
+    scorer:valid?{id:first.player.id,name:first.player.name,teamId:first.team.id,teamName:first.team.name}:null,
+    minute:first?.time?.elapsed??null,reason:!first?'Kein Torschussereignis im letzten H2H':own?'Erstes Tor war ein Eigentor':!valid?'Erster Torschütze nicht eindeutig zugeordnet':null,
+    source:'API-Sports · Spielereignisse'};
+  }
  }
  if(action==='detail'){
  const fixtures=await api('/fixtures?id='+q.id,key),g=fixtures[0];if(!g||!isScorerCompetition(g.league))return res.status(404).json({error:'Begegnung nicht gefunden'});
