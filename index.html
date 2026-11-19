@@ -1208,10 +1208,17 @@ async function generateH2hScorers(){
     const {game:g,player:p,evidence:e}=row,sp=g.sport,match=g.teams.home.name+' – '+g.teams.away.name;
     const prev=e.h2hDate?new Date(e.h2hDate).toLocaleDateString('de-DE'):'Datum unbekannt';
     const moment=e.minute!=null?e.minute+'. Minute':e.period?'Drittel '+e.period+(e.time?' · '+e.time:''):null;
-    return '<article class="home-player-card player-summary-card tip-summary-card">'+
-     tipSummaryHeader({index:i,match,market:p.name+' · '+p.team,league:g.league?.name,game:g,chance:'1. Tor',label:'Letztes H2H',quote:tipQuoteSlot(g,sp,'scorer',p.name)})+
-     '<div class="home-player-metrics"><div><span>Letztes H2H</span><b>'+esc(prev)+'</b></div><div><span>Erstes Tor</span><b>'+esc(moment||'Bestätigt')+'</b></div><div><span>Spieler</span><b>'+esc(p.name)+'</b></div></div>'+
-     '<p class="notice">Torschütze des ersten Tores im letzten direkten Vergleich. Aktuelle Mannschaftszugehörigkeit geprüft. Keine Aussage zur künftigen Trefferwahrscheinlichkeit.</p></article>';
+    const photo=portrait(p.id,sp!=='football',p.photo||p.headshot||null,sp==='nhl'?(e.scorer?.teamAbbrev||p.team):p.team,g.league?.season);
+    return '<article class="home-player-card player-summary-card">'+
+     '<div class="home-player-top"><span class="rank-number">'+(i+1)+'</span>'+
+     '<div class="home-profile">'+photo+'<span><strong>'+esc(p.name)+'</strong>'+
+     '<small class="summary-match">'+esc(p.team)+'</small>'+
+     '<small class="summary-match">'+esc(match)+'</small>'+
+     '<small class="summary-match">'+esc(g.league?.name||'Liga')+'</small>'+
+     summaryKickoff(g)+tipQuoteSlot(g,sp,'scorer',p.name)+
+     '</span></div><div class="goal-badge"><span>1. Tor</span><span>Letztes H2H</span></div></div>'+
+     '<div class="home-player-foot"><span>Letztes H2H: '+esc(prev)+(moment?' · Erstes Tor: '+esc(moment):'')+'</span></div>'+
+     '<p class="notice">Erster Torschütze des letzten direkten Vergleichs · aktueller Kader geprüft.</p></article>';
    }).join('')+'</div>':'<p class="notice">Kein belegter Ersttorschütze aus dem letzten direkten Vergleich im aktuellen Kader verfügbar. Es werden keine Ersatzspieler anhand der Form ausgewählt.</p>')+
    '<p class="notice">Auswahl unabhängig von der Mannschaftsform. Pro Begegnung höchstens ein Spieler. Ohne verifizierbares erstes Tor oder aktuellen Kaderabgleich kein Tipp. Nicht ausgewertet: '+missing.noH2h+' ohne belastbaren H2H-Torschützen, '+missing.notInRoster+' ohne aktuellen Kadernachweis.</p>';
   renderTipQuotes(out);
