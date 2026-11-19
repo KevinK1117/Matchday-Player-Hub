@@ -1,4 +1,4 @@
-import {delAnalysis,delDetail,delLive,delLiveForm,delStandings} from '../lib/del-data.js';
+import {delAnalysis,delDetail,delFirstGoal,delLive,delLiveForm,delStandings} from '../lib/del-data.js';
 import {officialDelDay} from '../lib/del-schedule.js';
 import {analyzeNhlDraws} from '../lib/nhl-draws.js';
 import {recentScorerForm} from '../lib/scorer-analysis.js';
@@ -11,9 +11,9 @@ const ended=g=>['FINAL','OFF'].includes(g.gameState);
 export function normalizeGame(g){const team=t=>({id:t?.id,name:value(t?.placeName)&&value(t?.commonName)?value(t.placeName)+' '+value(t.commonName):value(t?.name)||t?.abbrev||'Team',logo:t?.abbrev?`https://assets.nhle.com/logos/nhl/svg/${t.abbrev}_light.svg`:null,abbrev:t?.abbrev});return {fixture:{id:g.id,date:g.startTimeUTC,status:{short:ended(g)?'FT':['LIVE','CRIT'].includes(g.gameState)?'LIVE':['FUT','PRE'].includes(g.gameState)?'NS':g.gameState,elapsed:null,clock:nhlClock(g)},venue:{name:value(g.venue)}},league:{id:10000,name:'NHL',country:'USA / Kanada',season:Number(String(g.season||'').slice(0,4))||new Date(g.startTimeUTC).getUTCFullYear()},teams:{home:team(g.homeTeam),away:team(g.awayTeam)},goals:{home:g.homeTeam?.score??null,away:g.awayTeam?.score??null},sport:'nhl'};}
 export default async function handler(req,res){
  res.setHeader('Cache-Control',String(req.query?.action||'')==='lineups'?'no-store, max-age=0':'s-maxage=60, stale-while-revalidate=60');const q=req.query||{},a=q.action||'fixtures';
- if(!['fixtures','draws','clock','detail','table','player','player-form','squad','scorers','lineup-reference','lineups','del','del-detail','ice-del-detail','del-analysis','del-live','del-live-form','del-standings'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
- if(['fixtures','draws','del','ice-del-detail','del-analysis','del-live','del-live-form','del-standings'].includes(a)&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
- if(['clock','detail','lineup-reference','lineups','player','player-form','del-detail'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
+ if(!['fixtures','draws','clock','detail','table','player','player-form','squad','scorers','lineup-reference','lineups','del','del-detail','ice-del-detail','del-analysis','del-live','del-live-form','del-standings','h2h-first-goal','del-first-goal'].includes(a))return res.status(400).json({error:'Unbekannte NHL-Abfrage'});
+ if(['fixtures','draws','del','ice-del-detail','del-analysis','del-live','del-live-form','del-standings','del-first-goal'].includes(a)&&!/^\d{4}-\d{2}-\d{2}$/.test(String(q.date||'')))return res.status(400).json({error:'Ungültiges Datum'});
+ if(['clock','detail','lineup-reference','lineups','player','player-form','del-detail','h2h-first-goal'].includes(a)&&!/^\d{1,12}$/.test(String(q.id||'')))return res.status(400).json({error:'Ungültige ID'});
  if(a==='squad'&&!/^[A-Z]{3}$/.test(String(q.team||'')))return res.status(400).json({error:'Ungültiges NHL-Team'});
  if(a==='player-form'&&(!/^20\d{2}$/.test(String(q.season||''))||!/^20\d{2}-\d{2}-\d{2}$/.test(String(q.date||''))))return res.status(400).json({error:'Ungültige Saison oder Spieltag'});
  try{let data;
@@ -26,6 +26,10 @@ export default async function handler(req,res){
  if(a==='ice-del-detail'){
   if(!process.env.ICE_HOCKEY_API_KEY)return res.status(200).json({configured:false,matched:false,notice:'DEL-Datenzugang fehlt'});
   return res.status(200).json(await delDetail(q));
+ }
+ if(a==='del-first-goal'){
+  const result=await delFirstGoal({date:String(q.date),home:String(q.home||''),away:String(q.away||''),start:String(q.start||'')});
+  return res.status(200).json({configured:true,data:result,source:'Ice Hockey API'});
  }
  if(a==='del-standings')data=await delStandings(String(q.date));
  if(a==='del-analysis')data=await delAnalysis(String(q.date),['scorers','form'].includes(q.mode)?q.mode:'draws');
@@ -159,6 +163,32 @@ export default async function handler(req,res){
     playerByGameStats:ready?stats:null,
     checkedAt:new Date().toISOString(),
     notice:ready?'Spielberechtigte Spieler aus dem NHL-Spielbericht; Reihen-Zuordnung nicht bestätigt.':'Vor Spielbeginn keine offiziell bestätigten NHL-Angriffsreihen verfügbar.'};
+ }
+ if(a==='h2h-first-goal'){
+  const box=await fetchJson('/gamecenter/'+q.id+'/boxscore');
+  const g=normalizeGame(box),kickoff=Date.parse(g.fixture.date),home=box.homeTeam?.abbrev,away=box.awayTeam?.abbrev;
+  const season=Number(String(box.season||'').slice(0,4));
+  if(!home||!away||!Number.isInteger(season))throw Error('NHL-Teams oder Saison fehlen');
+  const schedules=await Promise.allSettled([season,season-1,season-2].map(y=>fetchJson('/club-schedule-season/'+home+'/'+y+(y+1))));
+  const past=schedules.filter(r=>r.status==='fulfilled').flatMap(r=>r.value.games||[])
+   .filter(x=>['FINAL','OFF'].includes(x.gameState)&&Date.parse(x.startTimeUTC)<kickoff&&
+    [x.homeTeam?.abbrev,x.awayTeam?.abbrev].includes(home)&&[x.homeTeam?.abbrev,x.awayTeam?.abbrev].includes(away))
+   .sort((a,b)=>Date.parse(b.startTimeUTC)-Date.parse(a.startTimeUTC))[0];
+  if(!past){data={fixtureId:g.fixture.id,scorer:null,reason:'Kein abgeschlossenes NHL-H2H verfügbar'};}
+  else{
+   const pbp=await fetchJson('/gamecenter/'+past.id+'/play-by-play');
+   const seconds=x=>{const t=String(x.timeInPeriod||'').split(':');return (Number(t[0])||0)*60+(Number(t[1])||0)};
+   const first=(pbp.plays||[]).filter(x=>x.typeDescKey==='goal')
+    .sort((a,b)=>(Number(a.periodDescriptor?.number)||0)-(Number(b.periodDescriptor?.number)||0)||seconds(a)-seconds(b))[0];
+   const id=first?.details?.scoringPlayerId,teamId=first?.details?.eventOwnerTeamId;
+   const side=teamId===past.homeTeam?.id?'home':teamId===past.awayTeam?.id?'away':null;
+   const abbrev=side?past[side+'Team']?.abbrev:null;
+   data={fixtureId:g.fixture.id,h2hFixtureId:past.id,h2hDate:past.startTimeUTC,
+    scorer:id&&abbrev?{id,teamAbbrev:abbrev}:null,
+    period:first?.periodDescriptor?.number??null,time:first?.timeInPeriod??null,
+    reason:!first?'Kein Tor im letzten NHL-H2H':!id||!abbrev?'Torschütze nicht eindeutig zugeordnet':null,
+    source:'NHL · Play-by-play'};
+  }
  }
  if(a==='detail'){
  const box=await fetchJson('/gamecenter/'+q.id+'/boxscore'),g=normalizeGame(box),season=String(box.season||'');
