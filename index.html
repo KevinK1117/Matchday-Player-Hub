@@ -547,6 +547,18 @@ const crest=t=>`<span class="crest">${t.logo&&/^https:\/\/(media\.api-sports\.io
 function form(s){return `<span class="form">${String(s||'').slice(-5).split('').map(x=>`<i class="${esc(x)}">${({W:'S',D:'U',L:'N'})[x]||'–'}</i>`).join('')}</span>`}
 function requestTimeout(ms){if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'){try{return AbortSignal.timeout(ms)}catch(e){console.warn('AbortSignal.timeout nicht verfügbar:',e)}}return undefined}
 async function get(q,sourceSport=sport){const endpoint=(sourceSport==='nhl'||sourceSport==='del'?'/api/nhlcenter':'/api/matchcenter');const params=new URLSearchParams();for(const [k,v] of Object.entries(q||{})){if(v!==undefined&&v!==null)params.set(k,String(v))}const url=endpoint+'?'+params.toString();let r;try{r=await fetch(url,{cache:'no-store',credentials:'same-origin'})}catch(e){throw Error('API-Verbindung fehlgeschlagen ('+endpoint+'): '+String(e?.message||e))}let d;try{d=await r.json()}catch{throw Error('Ungültige API-Antwort ('+r.status+')')}if(!r.ok||d.error)throw Error(d.error||'Datenabruf fehlgeschlagen ('+r.status+')');return d}
+// Share short-lived fixture requests across the combo tabs. The normal matchday
+// schedule keeps its selected leagues; 1/2 bets explicitly request ALL football fixtures.
+const comboFixtureRequests=new Map();
+function comboFixtures(date,source,scope='selected'){
+ const key=source+':'+date+':'+scope,hit=comboFixtureRequests.get(key);
+ if(hit&&hit.until>Date.now())return hit.promise;
+ const params=source==='del'?{action:'del-analysis',date,mode:'form'}:{action:'fixtures',date,...(source==='football'&&scope==='all'?{scope:'all'}:{})};
+ const promise=get(params,source).catch(error=>{comboFixtureRequests.delete(key);throw error});
+ comboFixtureRequests.set(key,{promise,until:Date.now()+90000});
+ if(comboFixtureRequests.size>24)comboFixtureRequests.delete(comboFixtureRequests.keys().next().value);
+ return promise;
+}
 function footballLeagueOptions(){
  const fixed=[...leagueList],seen=new Set(fixed.map(x=>x[0])),discovered=[];
  // Use the API's real league IDs, rather than guessed IDs for the Nordic second tiers.
@@ -1156,14 +1168,16 @@ async function gameGoalForm(g){
  if(goalFormCache.size>150)goalFormCache.delete(goalFormCache.keys().next().value);
  return promise;
 }
-async function loadGoalForms(fixtures,token=null){
+async function loadGoalForms(fixtures,token=null,onProgress=null){
  const out=new Map(),unique=[...new Map(fixtures.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now()).map(g=>[goalFormKey(g),g])).values()];
- let next=0;
- await Promise.all(Array.from({length:Math.min(3,unique.length)},async()=>{
+ let next=0,done=0;
+ await Promise.all(Array.from({length:Math.min(4,unique.length)},async()=>{
   while(next<unique.length){
    if(token!=null&&token!==comboToken)return;
    const g=unique[next++],form=await gameGoalForm(g);
    if(form)out.set(goalFormKey(g),form);
+   done++;
+   if(onProgress&&(done%4===0||done===unique.length))onProgress(done,unique.length);
   }
  }));
  return out;
@@ -1184,11 +1198,13 @@ async function generateWinnerBets(){
   if(demoMode){out.innerHTML='<p class="notice">Siegwetten benötigen echte abgeschlossene Teamspiele.</p>';return}
   let candidates=[],error='';
   if(kind==='football'){
-   candidates=games.filter(g=>isScorerCompetition(g.league)).map(g=>({...g,sport:'football'}));
+   const response=await comboFixtures(date,'football','all');
+   if(!response.configured)throw Error(response.notice||'Fußballdaten nicht verfügbar');
+   candidates=(response.data||[]).map(g=>({...g,sport:'football'}));
   }else{
    const [n,d]=await Promise.allSettled([
-    get({action:'fixtures',date},'nhl'),
-    get({action:'del-analysis',date,mode:'form'},'del')
+    comboFixtures(date,'nhl'),
+    comboFixtures(date,'del')
    ]);
    if(n.status==='fulfilled')candidates.push(...(n.value.data||[]).map(g=>({...g,sport:'nhl'})));
    else error+='NHL-Daten nicht verfügbar. ';
@@ -1196,7 +1212,7 @@ async function generateWinnerBets(){
    else error+='DEL-Daten nicht verfügbar. ';
   }
   const upcoming=candidates.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now());
-  const forms=await loadGoalForms(upcoming);
+  const forms=await loadGoalForms(upcoming,null,(done,total)=>{out.innerHTML='<p class="result-status">'+done+' / '+total+' Begegnungen ausgewertet · Tore der letzten zehn Spiele werden geprüft …</p>'});
   const ranked=upcoming.map(g=>({game:g,form:forms.get(goalFormKey(g))}))
    .filter(x=>x.form?.winner)
    .sort((a,b)=>Math.abs(b.form.home.goals-b.form.away.goals)-Math.abs(a.form.home.goals-a.form.away.goals))
@@ -1274,7 +1290,7 @@ async function generateH2hScorers(){
   if(demoMode){out.innerHTML='<p class="notice">Die H2H-Torschützenauswahl benötigt echte Spielereignisse.</p>';return}
   let fixtures=[],errors=[];
   if(hockey){
-   const [nhl,del]=await Promise.allSettled([get({action:'fixtures',date},'nhl'),get({action:'del-analysis',date,mode:'form'},'del')]);
+   const [nhl,del]=await Promise.allSettled([comboFixtures(date,'nhl'),comboFixtures(date,'del')]);
    if(nhl.status==='fulfilled')fixtures.push(...(nhl.value.data||[]).map(g=>({...g,sport:'nhl'})));
    else errors.push('NHL-Spielplan nicht verfügbar');
    if(del.status==='fulfilled')fixtures.push(...(del.value.data?.games||[]).map(g=>({...g,sport:'del'})));
@@ -1283,7 +1299,7 @@ async function generateH2hScorers(){
   const upcoming=fixtures.filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture.date)>Date.now()+300000)
    .sort((a,b)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date));
   const selected=[],missing={noH2h:0,notInRoster:0},next={value:0};
-  await Promise.all(Array.from({length:Math.min(3,upcoming.length)},async()=>{
+  await Promise.all(Array.from({length:Math.min(4,upcoming.length)},async()=>{
    while(next.value<upcoming.length){
     if(token!==comboToken)return;
     const game=upcoming[next.value++];
@@ -1374,7 +1390,7 @@ async function nhlPlayer(id){const token=++modalToken;openModal('NHL-Torschütze
 
 function nhlTable(rows){return rows.length?`<div class="tablewrap"><table><tr><th>#</th><th>Team</th><th>Sp</th><th>Tore</th><th>Pkt</th></tr>${[...rows].sort((a,b)=>b.points-a.points).map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.teamName?.default||r.teamAbbrev?.default)}</td><td>${fmt(r.gamesPlayed)}</td><td>${fmt(r.goalFor)}:${fmt(r.goalAgainst)}</td><td><b>${fmt(r.points)}</b></td></tr>`).join('')}</table></div>`:'<div class="empty">Tabelle nicht verfügbar.</div>'}
 async function loadScorers(g){const el=$('detailbody');el.innerHTML='<div class="loading">Topscorer laden …</div>';try{const rows=demoMode?demoPlayers:(await get({action:'scorers',league:g.league.id,season:g.league.season})).data;if(el!==$('detailbody')||tab!=='scorers')return;el.innerHTML=rows?.length?rows.map((p,i)=>`<button class="top-player" data-player="${p.player.id}" data-season="${g.league.season}"><b>${i+1}</b>${portrait(p.player.id,sport==='nhl',p.player.photo,p.statistics?.[0]?.team?.name,g.league.season)}<span>${esc(p.player.name)}<small>${esc(p.statistics?.[0]?.team?.name||'')} · ${fmt(p.statistics?.[0]?.goals?.total)} Tore</small></span></button>`).join(''):'<div class="empty">Keine Topscorer verfügbar.</div>'}catch(e){if(el===$('detailbody')&&tab==='scorers')el.innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
-const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL &amp; NHL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Fußball aus unterstützten ersten Erwachsenenligen sowie der 2. Bundesliga und 3. Liga. NHL-Remis gelten nach 60 Minuten. Die Liste zeigt beide Sportarten abwechselnd, soweit Tipps vorliegen. Für Tipps zählen mindestens drei direkte Duelle. Im Fußball fließt zusätzlich die jüngste Teamform ein.</p><label for="drawCount">Kombi-Größe</label><select id="drawCount"><option value="all">Alle passenden Tipps</option>${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Form-Außenseiter laut jüngster Torbilanz; keine Markt-Einstufung. Fußball zeigt eine unkalibrierte Modellschätzung. NHL zeigt die historische Remisquote der direkten Duelle.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
+const drawSection=document.createElement('section');drawSection.className='card draw-card-panel';drawSection.innerHTML=`<div class="drawpanel"><div class="eyebrow">FUSSBALL &amp; NHL · ANALYSE</div><h2>Remis & Außenseiter</h2><p class="muted">Alle kommenden Fußballspiele des gewählten Tages aus dem Datenanbieter werden geprüft. NHL-Remis gelten nach 60 Minuten. Die Liste zeigt beide Sportarten abwechselnd, soweit Tipps vorliegen. Für Tipps zählen mindestens drei direkte Duelle. Im Fußball fließt zusätzlich die jüngste Teamform ein.</p><label for="drawCount">Kombi-Größe</label><select id="drawCount"><option value="all">Alle passenden Tipps</option>${Array.from({length:15},(_,i)=>i+6).map(n=>`<option value="${n}">${n}er-Kombi</option>`).join('')}</select><button class="primary" id="drawGenerate">Kombi analysieren</button><div id="drawResult" aria-live="polite"></div><p class="notice">Form-Außenseiter laut jüngster Torbilanz; keine Markt-Einstufung. Fußball zeigt eine unkalibrierte Modellschätzung. NHL zeigt die historische Remisquote der direkten Duelle.</p></div>`;const backtestSection=document.createElement('section');backtestSection.className='card backtest-panel';
 backtestSection.innerHTML='<div class="backtest-wrap"><div class="eyebrow">FUSSBALL · QUALITÄTSCHECK</div><h2>Vergangene Tipps überprüfen</h2><p class="muted">Historische Spieltage werden ohne Daten aus der Zukunft bewertet. Ein Modell-Rücktest ist kein Nachweis früherer tatsächlich angezeigter Tipps.</p><div class="backtest-controls"><label for="backtestLeague">Wettbewerb</label><select id="backtestLeague" aria-label="Liga für Rücktest"></select><label for="backtestDays">Zeitraum</label><select id="backtestDays"><option value="14">Letzte 14 Tage</option><option value="30" selected>Letzte 30 Tage</option><option value="45">Letzte 45 Tage</option></select><button type="button" id="backtestRun" class="primary">Rücktest starten</button></div><div id="backtestResult" aria-live="polite"><p class="notice">Wähle eine Liga und starte den Vergleich mit vergangenen Ergebnissen.</p></div></div>';
 // Both panels must be inserted before binding their controls. A detached panel
 // caused a startup TypeError and left the Home page completely blank.
@@ -1502,7 +1518,7 @@ $('drawGenerate').onclick=async()=>{
    if(hockey[i])picks.push(hockey[i]);
   }
   const visible=picks.slice(0,count);
-  const footballStatus=received?scanned+' / '+total+' Spiele geprüft':stopped?'Abruf fehlgeschlagen':'Spielplan wird geladen';
+  const footballStatus=received?scanned+' / '+total+' Spiele geprüft (alle verfügbaren Ligen)':stopped?'Abruf fehlgeschlagen':'Spielplan wird geladen';
   const nhlStatus=nhlError?'Abruf fehlgeschlagen':nhl?nhl.considered+' / '+nhl.totalFixtures+' Spiele geprüft':'Spielplan wird geladen';
   const delStatus=delError?'Abruf fehlgeschlagen':del?del.considered+' / '+del.totalFixtures+' Spiele geprüft':'Spielplan wird geladen';
   const problems=errors+(nhl?.errors||0)+(del?.errors||0);
