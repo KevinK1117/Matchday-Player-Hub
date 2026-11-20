@@ -55,7 +55,37 @@ export function isTopFlight(league){
  if(league.type&&league.type!=='League')return false;
  return allowedDomestic.get(normalizeCompetition(league.country))?.has(normalizeCompetition(league.name))===true;
 }
-export function isScorerCompetition(league){return isTopFlight(league)}
+// Torschützen-Kombi: strict selection from the competition picker screenshots (2026-11-20).
+// Do not expand to the wider schedule or draw competition catalog.
+const scorerDomestic=makeMap({
+ Germany:'Bundesliga|2. Bundesliga|3. Liga',
+ Italy:'Serie A',
+ England:'Premier League',
+ France:'Ligue 1',
+ Spain:'La Liga|LaLiga',
+ SaudiArabia:'Saudi Pro League|Pro League|Saudi Professional League|Roshn Saudi League',
+ Netherlands:'Eredivisie',
+ Portugal:'Liga Portugal|Primeira Liga|Liga Portugal Betclic',
+ Denmark:'Superliga',
+ Japan:'J1 League',
+ SouthKorea:'K League 1',
+ Turkey:'Süper Lig|Super Lig',
+ USA:'Major League Soccer|MLS',
+ UnitedStates:'Major League Soccer|MLS'
+});
+const scorerCups=makeMap({
+ Germany:'DFB Pokal|DFB-Pokal',
+ World:'World Cup|FIFA World Cup|UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
+ Europe:'UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League',
+ UEFA:'UEFA Champions League|Champions League|UEFA Europa League|Europa League|Euro Championship|UEFA European Championship|UEFA EURO|UEFA Nations League|Nations League'
+});
+export function isScorerCompetition(league){
+ if(!league)return false;
+ const country=normalizeCompetition(league.country),name=normalizeCompetition(league.name);
+ if(league.type==='League'||!league.type)return scorerDomestic.get(country)?.has(name)===true;
+ if(league.type==='Cup')return scorerCups.get(country)?.has(name)===true;
+ return false;
+}
 // Remis uses the national senior first divisions and Germany’s second and third divisions. The wider fixture
 // catalogue still includes the approved lower divisions and cups.
 const drawFirstDivisions=makeMap({
