@@ -41,7 +41,7 @@ export default async function handler(req,res){
  let data;
  if(action==='clock'){data=(await api('/fixtures?id='+q.id,key))[0];if(!data||!isScorerCompetition(data.league))return res.status(404).json({error:'Spiel nicht gefunden'});}
  if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isScorerCompetition({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
- if(action==='fixtures')data=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isScorerCompetition(g.league));
+ if(action==='fixtures'){const dayFixtures=await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key);data=q.scope==='all'?dayFixtures:dayFixtures.filter(g=>isScorerCompetition(g.league));}
  if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
  if(!competitions.some(c=>isScorerCompetition({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur Wettbewerbe aus der Matchday-Auswahlliste sind freigeschaltet'});
