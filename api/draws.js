@@ -1,12 +1,11 @@
 import {footballH2h,regulationScore} from '../lib/football-h2h.js';
-import {isDrawFixture} from '../public/competitions.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
 const cache=new Map(),pending=new Map(),failed=new Map();
 let activeRequests=0,providerCooldownUntil=0;const waiters=[];
 async function providerSlot(){
- if(activeRequests<2)activeRequests++;
+ if(activeRequests<3)activeRequests++;
  else await new Promise(resolve=>waiters.push(resolve));
  return ()=>{const next=waiters.shift();if(next)next();else activeRequests--};
 }
@@ -81,11 +80,15 @@ function ranks(standings,id){
 async function evaluate(g,key,date){
  const h=g.teams.home,a=g.teams.away;
  const history=id=>api('/fixtures?team='+id+'&last=16',key);
- const [home,away,direct]=await Promise.allSettled([history(h.id),history(a.id),api('/fixtures/headtohead?h2h='+h.id+'-'+a.id+'&last=8',key)]);
- if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:'Formdaten nicht verfügbar'};
- if(direct.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:'Direkter Vergleich nicht verfügbar'};
- const h2h=footballH2h(direct.value,h.id,a.id,Date.parse(g.fixture.date));
+ // Check the required direct duels first. Most cross-league and cup fixtures
+ // can be ruled out with one provider call instead of three.
+ let direct;
+ try{direct=await api('/fixtures/headtohead?h2h='+h.id+'-'+a.id+'&last=8',key)}
+ catch{return {status:'providerError',picks:[],errorCode:'Direkter Vergleich nicht verfügbar'}}
+ const h2h=footballH2h(direct,h.id,a.id,Date.parse(g.fixture.date));
  if(h2h.played<3)return {status:'insufficientData',picks:[]};
+ const [home,away]=await Promise.allSettled([history(h.id),history(a.id)]);
+ if(home.status!=='fulfilled'||away.status!=='fulfilled')return {status:'providerError',picks:[],errorCode:'Formdaten nicht verfügbar'};
  const hf=form(home.value,h.id,date),af=form(away.value,a.id,date);
  if(hf.played<5||af.played<5)return {status:'insufficientData',picks:[]};
  const homeRate=(hf.scored+af.conceded)/2,awayRate=(af.scored+hf.conceded)/2;
@@ -117,7 +120,10 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
   const independent={configured:false,available:false,fixtures:new Map()},additional={providers:[]};
-  const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key)).filter(g=>isDrawFixture(g)&&Date.parse(g.fixture?.date)>scanAt);
+  // Analyse every upcoming football fixture returned for the selected day,
+  // not just a league allowlist. Completed/live matches cannot enter a pre-match combo.
+  const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key))
+   .filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture?.date)>scanAt&&g.teams?.home?.id&&g.teams?.away?.id);
   // Every upcoming football fixture returned for this matchday enters the scan.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
   const groups=new Map();
@@ -134,11 +140,11 @@ export default async function handler(req,res){
   // Every returned fixture remains in the scan, including smaller competitions.
   let selected=order.flatMap(id=>groups.get(id));
   const totalOrdered=selected.length;
-  if(batched)selected=selected.slice(offset,offset+8);
+  if(batched)selected=selected.slice(offset,offset+12);
   // Strict server budget avoids a 60-second HTTP timeout on busy days.
   // Unchecked fixtures remain visible as 'not_checked', never reported as analyzed.
   const results=new Array(selected.length);
-  const started=Date.now(),budgetMs=42000,maxWorkers=2;
+  const started=Date.now(),budgetMs=42000,maxWorkers=3;
   let next=0;
   await Promise.all(Array.from({length:Math.min(maxWorkers,selected.length)},async()=>{
    while(next<selected.length){
@@ -186,7 +192,7 @@ export default async function handler(req,res){
   diagnostics.rejectedByChecks=evidence.rejected;
   diagnostics.additionalEvidence=verifiedCandidates.length;
   diagnostics.provisional=provisionalCandidates.length;
-  let notice=!fixtures.length?'Keine kommenden Spiele in den unterstützten Fußballligen an diesem Tag.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' zusätzlich geprüfte und '+provisionalCandidates.length+' vorläufige Modellkandidaten. Für eine vollständige Kombi fehlen weitere geprüfte Auswahlen.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende direkte Duelle oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
+  let notice=!fixtures.length?'Keine kommenden Fußballspiele aus dem Datenanbieter an diesem Tag.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' zusätzlich geprüfte und '+provisionalCandidates.length+' vorläufige Modellkandidaten. Für eine vollständige Kombi fehlen weitere geprüfte Auswahlen.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende direkte Duelle oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(considered<fixtures.length)notice+=' Datenanbieter-Zeitbudget: '+considered+' von '+fixtures.length+' Spielen analysiert; übrige Spiele noch nicht geprüft.';
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
