@@ -833,9 +833,34 @@ function playerHistory(data,nhl=false){
  const rows=nhl?data.teamHistory||[]:data.transferHistory||[];
  return '<details class="player-history"><summary>Transferhistorie'+(nhl?' · NHL-Teamstationen':'')+' <span>('+rows.length+')</span></summary>'+(nhl?'<p class="muted">Saisonangaben aus Spielstatistiken; keine exakten Transferdaten.</p>':'')+(rows.length?rows.slice(0,20).map(r=>nhl?'<div class="transfer-row"><small>'+esc(season(r.since))+(r.until!==r.since?' – '+esc(season(r.until)):'')+'</small><span>'+logo(r)+esc(r.name)+'</span></div>':'<div class="transfer-row"><small>'+esc(r.date||'Datum offen')+'</small><span>'+logo(r.from)+esc(r.from?.name||'Unbekannt')+' → '+logo(r.to)+esc(r.to?.name||'Unbekannt')+'</span><small>'+esc(r.type)+'</small></div>').join(''):'<p class="muted">Keine Transferdaten beim Anbieter verfügbar.</p>')+'</details>';
 }
+// Official NHL SVG assets: resolve full team names and abbreviations consistently.
+const nhlClubCodes={
+ 'ducks':'ANA','anaheim ducks':'ANA','bruins':'BOS','boston bruins':'BOS',
+ 'sabres':'BUF','buffalo sabres':'BUF','flames':'CGY','calgary flames':'CGY',
+ 'hurricanes':'CAR','carolina hurricanes':'CAR','blackhawks':'CHI','chicago blackhawks':'CHI',
+ 'avalanche':'COL','colorado avalanche':'COL','blue jackets':'CBJ','columbus blue jackets':'CBJ',
+ 'stars':'DAL','dallas stars':'DAL','red wings':'DET','detroit red wings':'DET',
+ 'oilers':'EDM','edmonton oilers':'EDM','panthers':'FLA','florida panthers':'FLA',
+ 'kings':'LAK','los angeles kings':'LAK','wild':'MIN','minnesota wild':'MIN',
+ 'canadiens':'MTL','montreal canadiens':'MTL','predators':'NSH','nashville predators':'NSH',
+ 'devils':'NJD','new jersey devils':'NJD','islanders':'NYI','new york islanders':'NYI',
+ 'rangers':'NYR','new york rangers':'NYR','senators':'OTT','ottawa senators':'OTT',
+ 'flyers':'PHI','philadelphia flyers':'PHI','penguins':'PIT','pittsburgh penguins':'PIT',
+ 'sharks':'SJS','san jose sharks':'SJS','kraken':'SEA','seattle kraken':'SEA',
+ 'blues':'STL','st. louis blues':'STL','st louis blues':'STL',
+ 'lightning':'TBL','tampa bay lightning':'TBL','maple leafs':'TOR','toronto maple leafs':'TOR',
+ 'mammoth':'UTA','utah mammoth':'UTA','utah hockey club':'UTA',
+ 'canucks':'VAN','vancouver canucks':'VAN','golden knights':'VGK','vegas golden knights':'VGK',
+ 'capitals':'WSH','washington capitals':'WSH','jets':'WPG','winnipeg jets':'WPG'
+};
+const nhlClubCode=name=>{
+ const value=String(name||'').trim();
+ const code=value.toUpperCase();
+ return /^[A-Z]{3}$/.test(code)?code:(nhlClubCodes[value.toLowerCase()]||null);
+};
 function compactClubLeague(team,league,teamLogo,leagueLogo,sp='football',opponent=''){
- const nhl=sp==='nhl',abbr=String(team||'').toUpperCase();
- const logo=teamLogo||(nhl&&/^[A-Z]{3}$/.test(abbr)?'https://assets.nhle.com/logos/nhl/svg/'+abbr+'_light.svg':null);
+ const nhl=sp==='nhl',abbr=nhl?nhlClubCode(team):null;
+ const logo=teamLogo||(abbr?'https://assets.nhle.com/logos/nhl/svg/'+abbr+'_light.svg':null);
  const leagueName=league||(nhl?'NHL':sp==='del'?'PENNY DEL':'Liga');
  const leagueIcon=leagueLogo||(nhl?'https://assets.nhle.com/logos/nhl/svg/NHL_light.svg':null);
  const badge=(src,name)=>'<span class="compact-club-chip">'+profileIdentityImage(src,name,'compact-club-icon')+'<span>'+esc(name)+'</span></span>';
