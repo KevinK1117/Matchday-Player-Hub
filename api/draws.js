@@ -1,4 +1,5 @@
 import {footballH2h,regulationScore} from '../lib/football-h2h.js';
+import {isScorerCompetition,isDrawFixture} from '../public/competitions.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
@@ -120,11 +121,11 @@ export default async function handler(req,res){
  if(!key)return res.status(200).json({configured:false,picks:[],notice:'API-Sports-Zugang fehlt.'});
  try{
   const independent={configured:false,available:false,fixtures:new Map()},additional={providers:[]};
-  // Analyse every upcoming football fixture returned for the selected day,
-  // not just a league allowlist. Completed/live matches cannot enter a pre-match combo.
+  // Analyse only Matchday's configured adult competitions; retain the established
+  // draw/outsider eligibility rules and never scan unrelated worldwide fixtures.
   const fixtures=(await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key))
-   .filter(g=>g.fixture?.status?.short==='NS'&&Date.parse(g.fixture?.date)>scanAt&&g.teams?.home?.id&&g.teams?.away?.id);
-  // Every upcoming football fixture returned for this matchday enters the scan.
+   .filter(g=>isScorerCompetition(g.league)&&isDrawFixture(g)&&g.fixture?.status?.short==='NS'&&Date.parse(g.fixture?.date)>scanAt&&g.teams?.home?.id&&g.teams?.away?.id);
+  // Only the app's configured competitions enter the scan.
   const preferred=[78,79,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114];
   const groups=new Map();
   for(const fixture of fixtures){
@@ -137,7 +138,7 @@ export default async function handler(req,res){
    return (ai<0?999:ai)-(bi<0?999:bi)||a-b;
   });
   // Keep each league together so adjacent batches reuse standings and histories.
-  // Every returned fixture remains in the scan, including smaller competitions.
+  // Keep every eligible fixture in the app's league selection.
   let selected=order.flatMap(id=>groups.get(id));
   const totalOrdered=selected.length;
   if(batched)selected=selected.slice(offset,offset+12);
@@ -192,7 +193,7 @@ export default async function handler(req,res){
   diagnostics.rejectedByChecks=evidence.rejected;
   diagnostics.additionalEvidence=verifiedCandidates.length;
   diagnostics.provisional=provisionalCandidates.length;
-  let notice=!fixtures.length?'Keine kommenden Fußballspiele aus dem Datenanbieter an diesem Tag.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' zusätzlich geprüfte und '+provisionalCandidates.length+' vorläufige Modellkandidaten. Für eine vollständige Kombi fehlen weitere geprüfte Auswahlen.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende direkte Duelle oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
+  let notice=!fixtures.length?'Keine kommenden Spiele aus den freigeschalteten Matchday-Ligen an diesem Tag.':complete?count+'er-Auswahl verfügbar. Index ist keine Gewinnwahrscheinlichkeit.':candidates.length?verifiedCandidates.length+' zusätzlich geprüfte und '+provisionalCandidates.length+' vorläufige Modellkandidaten. Für eine vollständige Kombi fehlen weitere geprüfte Auswahlen.':diagnostics.providerErrors?'Analyse unvollständig: Datenabruf eingeschränkt. Bitte später erneut versuchen.':diagnostics.insufficientData?'Für die geprüften Spiele fehlen ausreichende direkte Duelle oder Formdaten.':'Keine passenden Remis-/Außenseiter-Signale für diesen Tag.';
   if(candidates.length&&diagnostics.providerErrors)notice+=' Datenabruf teilweise eingeschränkt.';
   if(considered<fixtures.length)notice+=' Datenanbieter-Zeitbudget: '+considered+' von '+fixtures.length+' Spielen analysiert; übrige Spiele noch nicht geprüft.';
   if(leagueCoverage.some(l=>l.leagueId===307))notice+=' Saudi Pro League im Prüfumfang enthalten.';
