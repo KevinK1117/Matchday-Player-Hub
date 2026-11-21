@@ -1,3 +1,4 @@
+import {footballProviderForLeague,sportmonksForApiSports} from '../lib/football-provider-routing.js';
 import {footballH2h} from '../lib/football-h2h.js';
 import {footballReference,scorerRole} from '../lib/lineup-reference.js';
 import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js';
@@ -22,7 +23,7 @@ async function xgFeed(date) {
 const safeDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s);
 export default async function handler(req,res){res.setHeader('Cache-Control','s-maxage=900, stale-while-revalidate=300');const key=process.env.API_SPORTS_KEY;if(!key)return res.status(200).json({configured:false,games:[],players:[],eligible:0,notice:'API_SPORTS_KEY fehlt. Bitte als verschlüsselte Vercel-Umgebungsvariable setzen. Keine Daten erfunden.'});const date=String(req.query.date||'');if(!safeDate(date))return res.status(400).json({error:'Ungültiges Datum'});const count=Math.max(6,Math.min(20,Number(req.query.count)||8));const confirmedOnly=req.query.confirmed==='1';try{
 const additional=await getFootballEvidence(date);
-const fixtures=await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key);const filtered=fixtures.filter(x=>isScorerCompetition(x.league));const allGames=filtered.map(x=>({id:x.fixture.id,league:x.league.name,leagueId:x.league.id,country:x.league.country,season:x.league.season,home:x.teams.home.name,away:x.teams.away.name,homeId:x.teams.home.id,awayId:x.teams.away.id,start:x.fixture.date,status:x.fixture.status?.short,homeGoals:x.goals.home,awayGoals:x.goals.away}));
+const fixtures=await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key);const filtered=fixtures.filter(x=>isScorerCompetition(x.league));const allGames=filtered.map(x=>({dataProvider:footballProviderForLeague(x.league.id),sportmonksLeagueId:sportmonksForApiSports(x.league.id),id:x.fixture.id,league:x.league.name,leagueId:x.league.id,country:x.league.country,season:x.league.season,home:x.teams.home.name,away:x.teams.away.name,homeId:x.teams.home.id,awayId:x.teams.away.id,start:x.fixture.date,status:x.fixture.status?.short,homeGoals:x.goals.home,awayGoals:x.goals.away}));
 if(!allGames.length)return res.status(200).json({configured:true,games:[],players:[],allPlayers:[],coverage:[],eligible:0,notice:'Keine freigeschalteten Spiele am gewählten Datum.',updatedAt:new Date().toISOString()});
 const preferred=[78,79,81,135,39,61,140,307,2,3,1,4,5,88,94,40,136,62,141,203,179,180,113,114,82];
 const wantedLeague=Number(req.query.league||0);
