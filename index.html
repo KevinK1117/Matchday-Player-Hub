@@ -1345,9 +1345,9 @@ async function generateH2hScorers(){
   if(token!==comboToken)return;
   // A historical H2H first scorer is not a valid probability estimate by itself.
   // Do not present players without season goals and sufficient verified minutes as combo picks.
-  const picks=selected.filter(row=>row.game.sport==='del'||scorerChance(row.player,row.game.sport==='nhl')!==null).slice(0,count);
-  const incomplete=selected.length-picks.length;
-  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Ersttorschützen'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+(incomplete?' · '+incomplete+' H2H-Torschützen ohne verifizierte Saisonwerte ausgeschlossen':'')+
+  const picks=selected.slice(0,count);
+  const incomplete=picks.filter(row=>row.game.sport!=='del'&&scorerChance(row.player,row.game.sport==='nhl')===null).length;
+  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Ersttorschützen'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+(incomplete?' · '+incomplete+' Spieler mit unvollständigen Statistikdaten (Wahrscheinlichkeit offen)':'')+
    (errors.length?' · '+esc(errors.join(' · ')):'')+'</p>'+
    (picks.length?'<div class="scorer-grid">'+picks.map((row,i)=>{
     const {game:g,player:p,evidence:e}=row,sp=g.sport,match=g.teams.home.name+' – '+g.teams.away.name;
