@@ -4,7 +4,25 @@ import {getFootballEvidence,externalTeamForm} from '../lib/football-evidence.js'
 import {isScorerCompetition} from '../public/competitions.js';
 import {getFlashscoreEvidence} from '../lib/flashscore-evidence.js';
 const ROOT='https://v3.football.api-sports.io';
-async function api(path,key){const r=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(16000)});if(!r.ok)throw Error('API-Sports HTTP '+r.status);const j=await r.json();if(j.errors && (Array.isArray(j.errors)?j.errors.length:Object.keys(j.errors).length))throw Error('API-Sports: '+JSON.stringify(j.errors).slice(0,140));return j.response||[]}
+const providerCache=new Map();
+const providerPending=new Map();
+async function api(path,key){
+ const cached=providerCache.get(path);
+ if(cached&&cached.until>Date.now())return cached.data;
+ if(providerPending.has(path))return providerPending.get(path);
+ const job=(async()=>{
+  const r=await fetch(ROOT+path,{headers:{'x-apisports-key':key},signal:AbortSignal.timeout(16000)});
+  if(!r.ok)throw Error('API-Sports HTTP '+r.status);
+  const j=await r.json();
+  if(j.errors&&(Array.isArray(j.errors)?j.errors.length:Object.keys(j.errors).length))throw Error('API-Sports: '+JSON.stringify(j.errors).slice(0,140));
+  const data=j.response||[];
+  providerCache.set(path,{data,until:Date.now()+900000});
+  if(providerCache.size>250)providerCache.delete(providerCache.keys().next().value);
+  return data;
+ })();
+ providerPending.set(path,job);
+ try{return await job}finally{providerPending.delete(path)}
+}
 // Optional licensed xG provider JSON adapter; keyed by API-Sports fixture and player IDs.
 // Example response: {"players":[{"fixtureId":123,"playerId":456,"xG":0.72,"minutes":80}]}
 async function xgFeed(date) {
@@ -64,7 +82,7 @@ const leagueOrder=[...buckets.keys()].sort((a,b)=>{
 });
 const missingSelection=[];
 // Distribute additional team-stat lookups fairly across every league; no league is excluded.
-const maxTeamLookups=Math.min(40,Math.max(16,leagueOrder.length*2));
+const maxTeamLookups=Math.min(8,leagueOrder.length);
 while(missingSelection.length<maxTeamLookups&&leagueOrder.some(id=>buckets.get(id).length)){
  for(const id of leagueOrder){
   const next=buckets.get(id).shift();
@@ -85,7 +103,7 @@ if(missingSelection.length){
 }
 // Head-to-head is evaluated only on finished meetings between these exact clubs.
 // No H2H record means no evidence of superiority, not an assumed win.
-const h2hGames=games.filter(g=>g.status==='NS'&&Date.parse(g.start)>Date.now()).slice(0,24);
+const h2hGames=games.filter(g=>g.status==='NS'&&Date.parse(g.start)>Date.now()).slice(0,8);
 const h2hResults=await Promise.allSettled(h2hGames.map(async g=>({id:g.id,homeId:g.homeId,awayId:g.awayId,start:g.start,rows:await api('/fixtures/headtohead?h2h='+g.homeId+'-'+g.awayId+'&last=8',key)})));
 const h2hByFixture=new Map();
 for(const result of h2hResults){
