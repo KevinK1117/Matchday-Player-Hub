@@ -38,30 +38,38 @@ export default async function handler(req,res){
  if(['table','scorers'].includes(action)&&!integer(q.league))return res.status(400).json({error:'Ungültige Liga'});
  if(action==='player'&&q.team!=null&&!integer(q.team))return res.status(400).json({error:'Ungültige Team-ID'});
  const key=process.env.API_SPORTS_KEY;
- if(!key)return res.status(200).json({configured:false,data:null,notice:'Sportdaten-Zugang fehlt. API_SPORTS_KEY in Vercel einrichten; die Demo lässt sich separat öffnen.'});
+ if(!key&&!process.env.SPORTMONKS_API_TOKEN)return res.status(200).json({configured:false,data:null,notice:'Kein Fußball-Datenanbieter konfiguriert.'});
  try{
  let data;
  if(action==='clock'){data=(await api('/fixtures?id='+q.id,key))[0];if(!data||!isScorerCompetition(data.league))return res.status(404).json({error:'Spiel nicht gefunden'});}
  if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isScorerCompetition({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
  if(action==='fixtures'){
   const [sports,monks]=await Promise.allSettled([
-   api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key),
+   key?api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key):Promise.resolve([]),
    process.env.SPORTMONKS_API_TOKEN?sportmonksFixtures(date):Promise.resolve(null)
   ]);
-  if(sports.status==='rejected')throw sports.reason;
-  const dayFixtures=sports.value;
-  const normalize=name=>String(name||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const sportsGames=sports.status==='fulfilled'?sports.value:[];
   const smGames=monks.status==='fulfilled'&&monks.value?monks.value.fixtures.map(sportmonksFixtureSummary):[];
+  if(sports.status==='rejected'&&!smGames.length)throw sports.reason;
+  const normalize=name=>String(name||'').normalize('NFKD').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
   const used=new Set();
-  data=(q.scope==='all'?dayFixtures:dayFixtures.filter(g=>isScorerCompetition(g.league))).map(g=>{
-   const smLeague=sportmonksForApiSports(g.league.id);
-   if(!smLeague)return {...g,dataProvider:'API-Sports'};
-   const candidates=smGames.filter(sm=>Number(sm.leagueId)===smLeague&&!used.has(sm.id)&&normalize(sm.home)===normalize(g.teams.home.name)&&normalize(sm.away)===normalize(g.teams.away.name)&&Math.abs(Date.parse(sm.start)-Date.parse(g.fixture.date))<=180000);
-   if(candidates.length!==1)return {...g,dataProvider:'API-Sports',sportmonksStatus:monks.status==='rejected'?'unavailable':'not_matched'};
-   const sm=candidates[0];used.add(sm.id);
-   return {...g,dataProvider:'Sportmonks',sportmonksFixtureId:sm.id,sportmonksLeagueId:smLeague,
-    goals:{home:sm.homeGoals??g.goals.home,away:sm.awayGoals??g.goals.away}};
-  });
+  const base=(q.scope==='all'?sportsGames:sportsGames.filter(g=>isScorerCompetition(g.league)));
+  data=base.filter(g=>!sportmonksForApiSports(g.league.id)||!smGames.some(sm=>Number(sm.leagueId)===sportmonksForApiSports(g.league.id)))
+   .map(g=>({...g,dataProvider:'API-Sports'}));
+  for(const sm of smGames){
+   const matches=base.filter(g=>sportmonksForApiSports(g.league.id)===Number(sm.leagueId)&&normalize(g.teams.home.name)===normalize(sm.home)&&normalize(g.teams.away.name)===normalize(sm.away)&&Math.abs(Date.parse(g.fixture.date)-Date.parse(sm.start))<3600000);
+   const existing=matches.length===1?matches[0]:null;
+   if(existing)used.add(existing.fixture.id);
+   const kickoff=sm.start&&/Z$|[+-]\\d\\d:\\d\\d$/.test(sm.start)?sm.start:sm.start?sm.start.replace(' ','T')+'Z':null;
+   const game=existing?{...existing}:{fixture:{id:sm.id,date:kickoff,status:{short:sm.status||'NS'}},league:{id:sm.leagueId,name:sm.league,country:null,season:null},teams:{home:{id:sm.homeId,name:sm.home},away:{id:sm.awayId,name:sm.away}},goals:{home:null,away:null}};
+   game.goals={home:sm.homeGoals,away:sm.awayGoals};
+   game.dataProvider='Sportmonks';game.sportmonksFixtureId=sm.id;game.sportmonksLeagueId=sm.leagueId;
+   game.fixture={...game.fixture,date:kickoff||game.fixture.date,status:{...game.fixture.status,short:sm.status||game.fixture.status?.short}};
+   data.push(game);
+  }
+  // If Sportmonks fails, retain API-Sports fixtures but disclose the degraded provider.
+  if(monks.status==='rejected')data=data.map(g=>({...g,providerWarning:'Sportmonks nicht verfügbar; API-Sports-Ersatzdaten'}));
+  data.sort((a,b)=>String(a.fixture?.date||'').localeCompare(String(b.fixture?.date||'')));
  }
  if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
