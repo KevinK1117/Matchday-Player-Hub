@@ -1589,7 +1589,7 @@ function scorerChance(p,nhl){
  const goals=Number(p.goals),games=Number(p.GP),minutes=Number(p.minutes),avg=Number(p.minutesPerGame);
  if(!Number.isFinite(goals)||goals<0)return null;
  let lambda;
- if(!nhl&&p.comboAnalysis){const rate=Number(p.comboAnalysis.expectedGoals);return Number.isFinite(rate)&&rate>=0&&rate<=3?100*(1-Math.exp(-rate)):null;}
+ if(!nhl&&p.comboAnalysis){const raw=p.comboAnalysis.expectedGoals;const rate=raw==null||raw===''?NaN:Number(raw);if(Number.isFinite(rate)&&rate>=0&&rate<=3)return 100*(1-Math.exp(-rate));/* Missing form-model data must not hide a valid season-based estimate. */}
  if(nhl){const rate=p.comboAnalysis?.expectedGoals??p.score;if(!Number.isFinite(games)||games<10||rate==null||!Number.isFinite(Number(rate)))return null;lambda=Number(rate)}
  else {if(!Number.isFinite(minutes)||minutes<600||!Number.isFinite(avg)||avg<45)return null;lambda=(goals/minutes)*Math.min(90,avg)}
  if(!Number.isFinite(lambda)||lambda<0||lambda>3)return null;
