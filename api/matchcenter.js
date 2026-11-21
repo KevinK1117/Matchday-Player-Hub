@@ -1,3 +1,5 @@
+import {sportmonksFixtures,sportmonksFixtureSummary} from '../lib/sportmonks-client.js';
+import {sportmonksForApiSports} from '../lib/football-provider-routing.js';
 import {footballTransfers} from '../lib/player-history.js';
 import {footballReference} from '../lib/lineup-reference.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
@@ -41,7 +43,26 @@ export default async function handler(req,res){
  let data;
  if(action==='clock'){data=(await api('/fixtures?id='+q.id,key))[0];if(!data||!isScorerCompetition(data.league))return res.status(404).json({error:'Spiel nicht gefunden'});}
  if(action==='leagues')data=(await api('/leagues?current=true',key)).filter(c=>isScorerCompetition({...c.league,country:c.country?.name})).map(c=>({id:c.league.id,name:c.league.name,country:c.country?.name,logo:c.league.logo,seasons:c.seasons}));
- if(action==='fixtures'){const dayFixtures=await api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key);data=q.scope==='all'?dayFixtures:dayFixtures.filter(g=>isScorerCompetition(g.league));}
+ if(action==='fixtures'){
+  const [sports,monks]=await Promise.allSettled([
+   api('/fixtures?date='+date+'&timezone=Europe%2FBerlin',key),
+   process.env.SPORTMONKS_API_TOKEN?sportmonksFixtures(date):Promise.resolve(null)
+  ]);
+  if(sports.status==='rejected')throw sports.reason;
+  const dayFixtures=sports.value;
+  const normalize=name=>String(name||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const smGames=monks.status==='fulfilled'&&monks.value?monks.value.fixtures.map(sportmonksFixtureSummary):[];
+  const used=new Set();
+  data=(q.scope==='all'?dayFixtures:dayFixtures.filter(g=>isScorerCompetition(g.league))).map(g=>{
+   const smLeague=sportmonksForApiSports(g.league.id);
+   if(!smLeague)return {...g,dataProvider:'API-Sports'};
+   const candidates=smGames.filter(sm=>Number(sm.leagueId)===smLeague&&!used.has(sm.id)&&normalize(sm.home)===normalize(g.teams.home.name)&&normalize(sm.away)===normalize(g.teams.away.name)&&Math.abs(Date.parse(sm.start)-Date.parse(g.fixture.date))<=180000);
+   if(candidates.length!==1)return {...g,dataProvider:'API-Sports',sportmonksStatus:monks.status==='rejected'?'unavailable':'not_matched'};
+   const sm=candidates[0];used.add(sm.id);
+   return {...g,dataProvider:'Sportmonks',sportmonksFixtureId:sm.id,sportmonksLeagueId:smLeague,
+    goals:{home:sm.homeGoals??g.goals.home,away:sm.awayGoals??g.goals.away}};
+  });
+ }
  if(['table','scorers'].includes(action)){
  const competitions=await api('/leagues?id='+q.league,key);
  if(!competitions.some(c=>isScorerCompetition({...c.league,country:c.country?.name})))return res.status(400).json({error:'Nur Wettbewerbe aus der Matchday-Auswahlliste sind freigeschaltet'});
