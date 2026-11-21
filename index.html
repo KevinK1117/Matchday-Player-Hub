@@ -1329,9 +1329,17 @@ async function generateH2hScorers(){
      Object.assign(p,{goals:totals.goals,GP:totals.gamesPlayed,shots:totals.shots,score:totals.gamesPlayed>0&&totals.goals!=null?totals.goals/totals.gamesPlayed:null,shotsPerGame:totals.gamesPlayed>0?totals.shots/totals.gamesPlayed:null,
       last5Goals:details?.recentSummary?.goals??recent.slice(0,5).reduce((n,x)=>n+(Number(x.goals)||0),0),photo:p.photo||details?.headshot});
     }else{
-     const stat=details?.profiles?.[0]?.statistics?.[0]||{},games=stat.games||{},goals=stat.goals||{},shots=stat.shots||{};
-     Object.assign(p,{goals:goals.total,minutes:games.minutes,minutesPerGame:games.appearences>0?games.minutes/games.appearences:null,
-      totalShots:shots.total,last5Goals:details?.recent?.slice(0,5).reduce((n,x)=>n+(Number(x.goals)||0),0)});
+     const stats=details?.profiles?.[0]?.statistics||[];
+     const stat=stats.find(x=>Number(x.team?.id)===Number(p.teamId))||stats.find(x=>String(x.team?.name||'').toLowerCase()===String(p.team||'').toLowerCase())||{};
+     const games=stat.games||{},goals=stat.goals||{},shots=stat.shots||{};
+     // Profile lookups may return several teams/seasons. Never overwrite valid
+     // scorer data with nulls or statistics from a different club.
+     const verified=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
+     if(verified(goals.total))p.goals=Number(goals.total);
+     if(verified(games.minutes)&&Number(games.minutes)>0)p.minutes=Number(games.minutes);
+     if(verified(games.appearences)&&Number(games.appearences)>0&&verified(games.minutes))p.minutesPerGame=Number(games.minutes)/Number(games.appearences);
+     if(verified(shots.total))p.totalShots=Number(shots.total);
+     if(Array.isArray(details?.recent)&&details.recent.length)p.last5Goals=details.recent.slice(0,5).reduce((n,x)=>n+(Number(x.goals)||0),0);
     }
    }catch{}
   }));
