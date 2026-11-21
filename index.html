@@ -1271,7 +1271,7 @@ async function h2hCurrentRoster(game,scorer){
  const match=roster.find(p=>String(sp==='nhl'?p.playerId:p.player?.id)===String(scorer.id));
  if(!match)return null;
  return sp==='nhl'?{id:match.playerId,name:match.name||scorer.name,photo:match.headshot||null,position:match.positionCode||null}:
-  {id:match.player.id,name:match.player.name||scorer.name,photo:match.player.photo||null,position:match.statistics?.[0]?.games?.position||null};
+  {id:match.player.id,name:match.player.name||scorer.name,photo:match.player.photo||null,position:match.statistics?.[0]?.games?.position||null,teamId:team.id,rosterStatistics:match.statistics||[]};
 }
 const delScorerProfiles=new Map();
 function delScorerProfile(id){
@@ -1317,19 +1317,18 @@ async function generateH2hScorers(){
   if(token!==comboToken)return;
   for(const row of selected)if(row.game.sport==='del')delScorerProfiles.set(String(row.player.id),{...row.player,h2hDate:row.evidence.h2hDate?new Date(row.evidence.h2hDate).toLocaleDateString('de-DE'):null,firstGoal:row.evidence.time||null});
   selected.sort((a,b)=>Date.parse(a.game.fixture.date)-Date.parse(b.game.fixture.date));
-  const picks=selected.slice(0,count);
-  await Promise.all(picks.map(async row=>{
+  await Promise.all(selected.map(async row=>{
    const p=row.player,sp=row.game.sport;
    if(sp==='del')return;
    try{
-    const details=await playerEvidence(p.id,row.game.league?.season,sp);
+    const details=sp==='football'?await get({action:'player',id:p.id,season:row.game.league?.season,team:p.teamId},sp).then(r=>r.data):await playerEvidence(p.id,row.game.league?.season,sp);
     if(sp==='nhl'){
      const totals=(details?.seasonTotals||[]).filter(x=>x.gameTypeId===2&&x.leagueAbbrev==='NHL').sort((a,b)=>Number(b.season)-Number(a.season))[0]||{};
      const recent=details?.last10Games||details?.last5Games||[];
      Object.assign(p,{goals:totals.goals,GP:totals.gamesPlayed,shots:totals.shots,score:totals.gamesPlayed>0&&totals.goals!=null?totals.goals/totals.gamesPlayed:null,shotsPerGame:totals.gamesPlayed>0?totals.shots/totals.gamesPlayed:null,
       last5Goals:details?.recentSummary?.goals??recent.slice(0,5).reduce((n,x)=>n+(Number(x.goals)||0),0),photo:p.photo||details?.headshot});
     }else{
-     const stats=details?.profiles?.[0]?.statistics||[];
+     const stats=[...(details?.profiles?.[0]?.statistics||[]),...(p.rosterStatistics||[])];
      const stat=stats.find(x=>Number(x.team?.id)===Number(p.teamId))||stats.find(x=>String(x.team?.name||'').toLowerCase()===String(p.team||'').toLowerCase())||{};
      const games=stat.games||{},goals=stat.goals||{},shots=stat.shots||{};
      // Profile lookups may return several teams/seasons. Never overwrite valid
@@ -1344,7 +1343,11 @@ async function generateH2hScorers(){
    }catch{}
   }));
   if(token!==comboToken)return;
-  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Ersttorschützen'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+
+  // A historical H2H first scorer is not a valid probability estimate by itself.
+  // Do not present players without season goals and sufficient verified minutes as combo picks.
+  const picks=selected.filter(row=>row.game.sport==='del'||scorerChance(row.player,row.game.sport==='nhl')!==null).slice(0,count);
+  const incomplete=selected.length-picks.length;
+  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Ersttorschützen'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+(incomplete?' · '+incomplete+' H2H-Torschützen ohne verifizierte Saisonwerte ausgeschlossen':'')+
    (errors.length?' · '+esc(errors.join(' · ')):'')+'</p>'+
    (picks.length?'<div class="scorer-grid">'+picks.map((row,i)=>{
     const {game:g,player:p,evidence:e}=row,sp=g.sport,match=g.teams.home.name+' – '+g.teams.away.name;
