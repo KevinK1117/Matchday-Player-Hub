@@ -1,4 +1,3 @@
-import {supplementPlayerProfile} from '../lib/sportmonks-player-supplement.js';
 import {footballTransfers} from '../lib/player-history.js';
 import {footballReference} from '../lib/lineup-reference.js';
 import {getPlayerXg,summarizeLastFive} from '../lib/player-metrics.js';
@@ -56,7 +55,6 @@ export default async function handler(req,res){
  }
  if(action==='player'){
  const profiles=await playerApi('/players?id='+q.id+'&season='+q.season,key);
- const supplement=await supplementPlayerProfile(profiles,q.team,q.season);
  const stats=profiles[0]?.statistics||[];
  if(q.team!=null&&!stats.some(s=>String(s.team?.id)===String(q.team)))return res.status(404).json({error:'Für dieses Team fehlen Spielerstatistiken'});
  const team=q.team!=null?Number(q.team):stats[0]?.team?.id;
@@ -68,7 +66,7 @@ export default async function handler(req,res){
  let participation='Keine kommende Begegnung verfügbar';
  if(team){try{const next=(await playerApi('/fixtures?team='+team+'&next=1',key))[0];if(next){const lineups=await playerApi('/fixtures/lineups?fixture='+next.fixture.id,key);const side=lineups.find(s=>s.team?.id===team);participation=side?.startXI?.length===11?(side.startXI.some(p=>Number(p.player.id)===Number(q.id))?'Startelf bestätigt':'Nicht in bestätigter Startelf'):'Startelf noch nicht veröffentlicht';participation+=' · '+next.teams.home.name+' – '+next.teams.away.name;}}catch{participation='Startelfstatus nicht verfügbar'}}
  let transferHistory=[],transferHistoryUnavailable=false;try{transferHistory=footballTransfers(await playerApi('/transfers?player='+q.id,key))}catch{transferHistoryUnavailable=true}
- data={transferHistory,transferHistoryUnavailable,profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season),statisticsSource:supplement.source,sportmonksSupplemented:supplement.supplemented};
+ data={transferHistory,transferHistoryUnavailable,profiles,recent,recentError,participation,recentSummary:summarizeLastFive(recent),xg:await getPlayerXg(q.id,'football',q.season),statisticsSource:'API-Sports',sportmonksSupplemented:[]};
  }
  if(action==='scorers')data=await api('/players/topscorers?league='+q.league+'&season='+q.season,key);
  if(action==='squad'){
