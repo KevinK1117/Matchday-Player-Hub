@@ -36,7 +36,7 @@ const leagueIds=[...new Set(relevant.map(g=>g.leagueId))].sort((a,b)=>priorityIn
 // Every enabled league with an upcoming fixture is considered, not just the first 16.
 const chosen=new Set(leagueIds);
 const games=relevant.filter(g=>chosen.has(g.leagueId));
-if(!games.length)return res.status(200).json({configured:true,games:[],players:[],allPlayers:[],coverage:[],eligible:0,notice:'Keine kommenden Spiele für die ausgewählte Liga am gewählten Tag.',updatedAt:new Date().toISOString()});
+if(!games.length)return res.status(200).json({configured:true,games:sportmonks?.games||[],players:[],allPlayers:sportmonks?.allPlayers||[],coverage:sportmonks?.coverage||[],eligible:0,notice:sportmonks?.notice||'Keine kommenden Spiele für die ausgewählte Liga am gewählten Tag.',sportmonksError:sportmonks?.error||null,updatedAt:new Date().toISOString()});
 // Top scorers are competition-specific historical season stats, not fixture-confirmed lineups.
 const cupGames=games.filter(g=>[2,3,81,82].includes(g.leagueId)||/champions league|europa league|dfb.?pokal/i.test(g.league));
 const cupTeams=new Set(cupGames.flatMap(g=>[Number(g.homeId),Number(g.awayId)]));
