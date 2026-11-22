@@ -64,7 +64,7 @@ export default async function handler(req,res){
   }catch{}
   players.sort((a,b)=>b.score-a.score || b.goals-a.goals);
   // A small worker pool keeps the NHL enrichment bounded and stops dispatching on rate limits.
-  const shortlist=players.filter(p=>['C','L','R','LW','RW'].includes(p.position)).slice(0,24);
+  const shortlist=players.filter(p=>['L','R','LW','RW'].includes(p.position)).slice(0,24);
   const yr=Number(date.slice(0,4))-(Number(date.slice(5,7))<7?1:0);
   let stoppedForRateLimit=false;
   let nextPlayer=0;
@@ -139,14 +139,14 @@ export default async function handler(req,res){
    p.lineupReferenceDate=ref?.date||null;
    p.projectedLine=projectedLines.get(p.team)?.get(String(p.id))??null;
    if(p.lineupSource==='season')p.participation='Aufstellung offen · Saisonposition';
-   if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Stürmer in verfügbaren Kaderdaten';
+   if(!scorerRole(p,'nhl'))p.exclusionReason='Kein Außenstürmer in verfügbaren Kaderdaten';
   }
   const eligiblePlayers=players.filter(p=>!p.exclusionReason&&p.fixtureId!=null&&p.GP>=10&&p.goals>=3&&p.shotsPerGame>=1.5&&(req.query.confirmed!=='1'||p.participation==='Bestätigter Einsatz'));
 
   // Preserve the verified thresholds; show provider and selection coverage explicitly.
   const picked=eligiblePlayers.slice(0,count);
   const diagnostics={scheduledGames:upcoming.length,clubsRequested:clubs.length,clubsWithStats:clubStats.filter(x=>x.status==='fulfilled').length,clubsFailed:clubStats.flatMap((x,i)=>x.status==='rejected'?[clubs[i]]:[]),playersReceived:players.length,eligiblePlayers:eligiblePlayers.length,excludedPlayers:players.filter(p=>p.exclusionReason).length};
-  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,diagnostics,method:'Schussbasiertes Modell mit langfristig geglätteter Trefferquote mit Schussvolumen der letzten zehn Spiele, Gegner-Gegentoren und optional verifiziertem Spieler-xG. Nur Stürmer einschließlich Center zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte zehn Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG und hochwertige Torchancen nur bei verifizierten Anbieterwerten. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
+  return res.status(200).json({date,games,players:picked,allPlayers:players,eligible:eligiblePlayers.length,requested:count,diagnostics,method:'Schussbasiertes Modell mit langfristig geglätteter Trefferquote mit Schussvolumen der letzten zehn Spiele, Gegner-Gegentoren und optional verifiziertem Spieler-xG. Nur Außenstürmer zugelassen. Rangfolge und Poisson-Schätzung verwenden dieselbe erwartete Torrate; nicht kalibriert.',sources:['NHL Score API','NHL Club Stats API','NHL Player Game Logs',...(opponentDefenseAvailable?['NHL Official Standings: Gegentore']:[])],notice:'Teilnahme vor Spielbeginn nicht bestätigt. Letzte zehn Spiele nur soweit NHL API verfügbar; bei Limitierung fehlen einzelne Detailwerte. xG und hochwertige Torchancen nur bei verifizierten Anbieterwerten. Saisondurchschnitt ist aktueller API-Stand. Nur angesetzte Spiele und Spieler mit ausreichender Saisonstichprobe; keine erzwungene Spielverteilung.',issues:clubStats.filter(s=>s.status==='rejected').length,updatedAt:new Date().toISOString()});
  }catch(e){const limited=!!e.rateLimited;res.setHeader('Retry-After',limited?'180':'30');return res.status(limited?503:502).json({error:limited?'NHL API Anfragelimit erreicht':'NHL-Daten konnten nicht geladen werden',detail:limited?'NHL hat vorübergehend zu viele Anfragen registriert. Bitte in einigen Minuten erneut laden.':String(e.message||e)})}
 }
 
