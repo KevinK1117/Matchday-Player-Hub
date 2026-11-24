@@ -178,12 +178,14 @@ export default async function handler(req,res){
   else{
    const pbp=await fetchJson('/gamecenter/'+past.id+'/play-by-play');
    const seconds=x=>{const t=String(x.timeInPeriod||'').split(':');return (Number(t[0])||0)*60+(Number(t[1])||0)};
-   const first=(pbp.plays||[]).filter(x=>x.typeDescKey==='goal')
-    .sort((a,b)=>(Number(a.periodDescriptor?.number)||0)-(Number(b.periodDescriptor?.number)||0)||seconds(a)-seconds(b))[0];
+   const goals=(pbp.plays||[]).filter(x=>x.typeDescKey==='goal'&&x.periodDescriptor?.periodType!=='SO')
+    .sort((a,b)=>(Number(a.periodDescriptor?.number)||0)-(Number(b.periodDescriptor?.number)||0)||seconds(a)-seconds(b));
+   const first=goals[0];
+   const candidates=goals.flatMap((e,i)=>{const id=e.details?.scoringPlayerId,t=e.details?.eventOwnerTeamId,abbrev=t===past.homeTeam?.id?past.homeTeam.abbrev:t===past.awayTeam?.id?past.awayTeam.abbrev:null;return id&&abbrev?[{scorer:{id,teamAbbrev:abbrev},period:e.periodDescriptor?.number??null,time:e.timeInPeriod??null,goalOrder:i+1}]:[]});
    const id=first?.details?.scoringPlayerId,teamId=first?.details?.eventOwnerTeamId;
    const side=teamId===past.homeTeam?.id?'home':teamId===past.awayTeam?.id?'away':null;
    const abbrev=side?past[side+'Team']?.abbrev:null;
-   data={fixtureId:g.fixture.id,h2hFixtureId:past.id,h2hDate:past.startTimeUTC,
+   data={fixtureId:g.fixture.id,h2hFixtureId:past.id,h2hDate:past.startTimeUTC,candidates,
     scorer:id&&abbrev?{id,teamAbbrev:abbrev}:null,
     period:first?.periodDescriptor?.number??null,time:first?.timeInPeriod??null,
     reason:!first?'Kein Tor im letzten NHL-H2H':!id||!abbrev?'Torschütze nicht eindeutig zugeordnet':null,
