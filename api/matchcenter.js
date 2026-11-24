@@ -139,9 +139,10 @@ export default async function handler(req,res){
    const goals=events.map((e,i)=>({...e,_order:i})).filter(e=>String(e.type||'').toLowerCase()==='goal')
     .sort((a,b)=>(Number(a.time?.elapsed)||0)-(Number(b.time?.elapsed)||0)||
      (Number(a.time?.extra)||0)-(Number(b.time?.extra)||0)||a._order-b._order);
+   const candidates=goals.flatMap((e,i)=>e.player?.id&&e.player?.name&&[homeId,awayId].includes(e.team?.id)&&!/own goal|eigentor|missed penalty|penalty shootout/i.test(String(e.detail||''))?[{scorer:{id:e.player.id,name:e.player.name,teamId:e.team.id,teamName:e.team.name},minute:e.time?.elapsed??null,goalOrder:i+1}]:[]);
    const first=goals[0],own=/own goal|eigento?r/i.test(String(first?.detail||''));
    const valid=first&&!own&&first.player?.id&&first.player?.name&&[homeId,awayId].includes(first.team?.id);
-   data={fixtureId:g.fixture.id,h2hFixtureId:last.fixture.id,h2hDate:last.fixture.date,
+   data={fixtureId:g.fixture.id,h2hFixtureId:last.fixture.id,h2hDate:last.fixture.date,candidates,
     scorer:valid?{id:first.player.id,name:first.player.name,teamId:first.team.id,teamName:first.team.name}:null,
     minute:first?.time?.elapsed??null,reason:!first?'Kein Torschussereignis im letzten H2H':own?'Erstes Tor war ein Eigentor':!valid?'Erster Torschütze nicht eindeutig zugeordnet':null,
     source:'API-Sports · Spielereignisse'};
