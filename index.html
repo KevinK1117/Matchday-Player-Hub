@@ -1282,10 +1282,14 @@ function delScorerProfile(id){
  '<p class="notice">Letztes direktes Duell: '+esc(p.h2hDate||'–')+' · erstes Tor '+esc(p.firstGoal||'–')+'</p>'+
  '<p class="notice">Weitere Spielerstatistiken und eine Modellwahrscheinlichkeit sind für diesen DEL-Spieler derzeit nicht verifiziert verfügbar.</p></div>';
 }
+function h2hForwardPosition(position,sp){
+ const p=String(position||'').trim().toUpperCase();
+ return (sp==='football'?['F','ST','CF','FW','LW','RW','LF','RF','ATTACKER','FORWARD','STRIKER','WINGER','STÜRMER','MITTELSTÜRMER','LINKSAUSSEN','RECHTSAUSSEN','LINKSAUẞEN','RECHTSAUẞEN']:['F','C','L','R','LW','RW','FORWARD','CENTER','CENTRE','LEFT WING','RIGHT WING','WINGER','STÜRMER','ANGRIFF']).includes(p);
+}
 async function generateH2hScorers(){
  const token=++comboToken,date=$('date').value,count=Number($('count').value),hockey=sport==='nhl'||sport==='del';
  const button=$('generate'),out=$('comboResult');button.disabled=true;
- out.innerHTML='<p class="result-status">Letzten direkten Vergleich und erstes Tor je Begegnung prüfen …</p>';
+ out.innerHTML='<p class="result-status">Letzten direkten Vergleich und ersten geeigneten Offensivspieler je Begegnung prüfen …</p>';
  try{
   if(demoMode){out.innerHTML='<p class="notice">Die H2H-Torschützenauswahl benötigt echte Spielereignisse.</p>';return}
   let fixtures=[],errors=[];
@@ -1304,14 +1308,22 @@ async function generateH2hScorers(){
     if(token!==comboToken)return;
     const game=upcoming[next.value++];
     const evidence=await h2hFirstForGame(game);
-    if(!evidence?.scorer){missing.noH2h++;unavailable.push({game,reason:'Kein belegter Ersttorschütze aus dem letzten direkten Duell'});continue}
-    const player=await h2hCurrentRoster(game,evidence.scorer);
-    if(!player){missing.notInRoster++;unavailable.push({game,reason:'Historischer Torschütze nicht im aktuellen Kader verifiziert'});continue}
-    const sp=game.sport,team=sp==='nhl'?
-      [game.teams.home,game.teams.away].find(t=>t.abbrev===evidence.scorer.teamAbbrev):
-      [game.teams.home,game.teams.away].find(t=>String(t.id)===String(evidence.scorer.teamId));
-    if(!team){missing.notInRoster++;unavailable.push({game,reason:'Mannschaftszuordnung nicht verifiziert'});continue}
-    selected.push({game,player:{...player,team:team.name,sport:sp,fixtureId:game.fixture.id},evidence});
+    const candidates=Array.isArray(evidence?.candidates)?evidence.candidates:evidence?.scorer?[{scorer:evidence.scorer,minute:evidence.minute,period:evidence.period,time:evidence.time,goalOrder:1}]:[];
+    if(!candidates.length){missing.noH2h++;unavailable.push({game,reason:'Keine belegten Torschützen im letzten direkten Duell'});continue}
+    const sp=game.sport;
+    let chosen=null;
+    for(const candidate of candidates){
+     const scorer=candidate.scorer;
+     if(!scorer)continue;
+     const player=await h2hCurrentRoster(game,scorer);
+     if(!player||!h2hForwardPosition(player.position,sp))continue;
+     const team=sp==='nhl'?[game.teams.home,game.teams.away].find(t=>t.abbrev===scorer.teamAbbrev):sp==='del'?{name:scorer.teamName}:[game.teams.home,game.teams.away].find(t=>String(t.id)===String(scorer.teamId));
+     if(!team?.name)continue;
+     chosen={game,player:{...player,team:team.name,sport:sp,fixtureId:game.fixture.id},evidence:{...evidence,...candidate}};
+     break;
+    }
+    if(chosen)selected.push(chosen);
+    else{missing.notInRoster++;unavailable.push({game,reason:'Kein verifizierter Stürmer, Center oder Außen unter den H2H-Torschützen im aktuellen Kader'});}
    }
   }));
   if(token!==comboToken)return;
@@ -1347,7 +1359,7 @@ async function generateH2hScorers(){
   // Do not present players without season goals and sufficient verified minutes as combo picks.
   const picks=selected.slice(0,count);
   const incomplete=picks.filter(row=>row.game.sport!=='del'&&scorerChance(row.player,row.game.sport==='nhl')===null).length;
-  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Ersttorschützen'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+(incomplete?' · '+incomplete+' Spieler mit unvollständigen Statistikdaten (Wahrscheinlichkeit offen)':'')+
+  out.innerHTML='<p class="result-status">'+picks.length+' von '+upcoming.length+' Begegnungen mit verifiziertem H2H-Offensivspieler'+(picks.length<count?' · '+(count-picks.length)+' Auswahl(en) fehlen für die gewünschte Kombi':'')+(incomplete?' · '+incomplete+' Spieler mit unvollständigen Statistikdaten (Wahrscheinlichkeit offen)':'')+
    (errors.length?' · '+esc(errors.join(' · ')):'')+'</p>'+
    (picks.length?'<div class="scorer-grid">'+picks.map((row,i)=>{
     const {game:g,player:p,evidence:e}=row,sp=g.sport,match=g.teams.home.name+' – '+g.teams.away.name;
@@ -1373,10 +1385,10 @@ async function generateH2hScorers(){
      summaryKickoff(g)+tipQuoteSlot(g,sp,'scorer',p.name)+
      '</span></button><div class="goal-badge"><strong>'+(chance!=null?chance.toFixed(1)+' %':'– %')+
      '</strong><span>'+chanceLabel+'</span></div></div>'+
-     metrics+'<div class="home-player-foot"><span>H2H '+esc(prev)+(moment?' · 1. Tor: '+esc(moment):'')+
+     metrics+'<div class="home-player-foot"><span>H2H '+esc(prev)+(moment?' · '+(e.goalOrder||1)+'. Tor: '+esc(moment):'')+
      '</span></div></article>';
-   }).join('')+'</div>':'<p class="notice">Kein belegter Ersttorschütze aus dem letzten direkten Vergleich im aktuellen Kader verfügbar. Es werden keine Ersatzspieler anhand der Form ausgewählt.</p>')+
-   '<p class="notice">Auswahl unabhängig von der Mannschaftsform. Pro Begegnung höchstens ein Spieler. Ohne verifizierbares erstes Tor oder aktuellen Kaderabgleich kein Tipp. Nicht ausgewertet: '+missing.noH2h+' ohne belastbaren H2H-Torschützen, '+missing.notInRoster+' ohne aktuellen Kadernachweis.</p>';
+   }).join('')+'</div>':'<p class="notice">Kein belegter Offensiv-Torschütze aus dem letzten direkten Vergleich im aktuellen Kader verfügbar.</p>')+
+   '<p class="notice">Auswahl unabhängig von der Mannschaftsform. Pro Begegnung höchstens ein Spieler. Verteidiger und Torhüter werden übersprungen; das nächste belegte Tor eines Offensivspielers zählt. Ohne verifizierten Offensivspieler kein Tipp. Nicht ausgewertet: '+missing.noH2h+' ohne belastbaren H2H-Torschützen, '+missing.notInRoster+' ohne geeigneten Offensivspieler im aktuellen Kader.</p>';
   if(unavailable.length)out.innerHTML+='<details class="analysis-details" open><summary>'+unavailable.length+' Begegnung(en) ohne verifizierte Torschützenauswahl</summary>'+unavailable.sort((a,b)=>Date.parse(a.game.fixture.date)-Date.parse(b.game.fixture.date)).map(({game,reason})=>'<p class="notice"><strong>'+esc(game.teams.home.name)+' – '+esc(game.teams.away.name)+'</strong> · '+esc(time(game.fixture.date))+' Uhr · '+esc(reason)+'</p>').join('')+'</details>';
   renderTipQuotes(out);
  }catch(e){if(token===comboToken)out.innerHTML='<p class="result-status">'+esc(e.message||String(e))+'</p>'}
