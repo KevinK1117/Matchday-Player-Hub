@@ -82,7 +82,10 @@ const scorerCups=makeMap({
 export function isScorerCompetition(league){
  if(!league)return false;
  const country=normalizeCompetition(league.country),name=normalizeCompetition(league.name);
- if(league.type==='League'||!league.type)return scorerDomestic.get(country)?.has(name)===true;
+ // API-Sports fixture league objects omit type. IDs 2 and 3 identify the senior UEFA competitions.
+ if([2,3].includes(Number(league.id)))return true;
+ if(!league.type)return scorerDomestic.get(country)?.has(name)===true||scorerCups.get(country)?.has(name)===true;
+ if(league.type==='League')return scorerDomestic.get(country)?.has(name)===true;
  if(league.type==='Cup')return scorerCups.get(country)?.has(name)===true;
  return false;
 }
