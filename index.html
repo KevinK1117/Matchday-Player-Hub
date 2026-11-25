@@ -1284,7 +1284,7 @@ function delScorerProfile(id){
 }
 function h2hForwardPosition(position,sp){
  const p=String(position||'').trim().toUpperCase();
- return (sp==='football'?['F','ST','CF','FW','LW','RW','LF','RF','ATTACKER','FORWARD','STRIKER','WINGER','STÜRMER','MITTELSTÜRMER','LINKSAUSSEN','RECHTSAUSSEN','LINKSAUẞEN','RECHTSAUẞEN']:['F','C','L','R','LW','RW','FORWARD','CENTER','CENTRE','LEFT WING','RIGHT WING','WINGER','STÜRMER','ANGRIFF']).includes(p);
+ return (sp==='football'?['F','ST','CF','FW','LW','RW','LF','RF','ATTACKER','FORWARD','STRIKER','WINGER','STÜRMER','MITTELSTÜRMER','LINKSAUSSEN','RECHTSAUSSEN','LINKSAUẞEN','RECHTSAUẞEN']:sp==='nhl'?['L','R','LW','RW','LEFT WING','RIGHT WING']:['F','C','L','R','LW','RW','FORWARD','CENTER','CENTRE','LEFT WING','RIGHT WING','WINGER','STÜRMER','ANGRIFF']).includes(p);
 }
 async function generateH2hScorers(){
  const token=++comboToken,date=$('date').value,count=Number($('count').value),hockey=sport==='nhl'||sport==='del';
